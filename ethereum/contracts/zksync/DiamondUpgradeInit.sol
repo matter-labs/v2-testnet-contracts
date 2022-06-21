@@ -1,0 +1,25 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+pragma solidity ^0.8.0;
+
+import "./facets/Mailbox.sol";
+import "../common/L2ContractHelper.sol";
+
+/// @author Matter Labs
+contract DiamondUpgradeInit is MailboxFacet {
+    /// @dev Request priority operation on behalf of force deployer address to the deployer system contract
+    function forceDeployL2Contract(
+        bytes calldata _forceDeployCalldata,
+        bytes[] calldata _factoryDeps,
+        uint256 _ergsLimit
+    ) public payable {
+        _requestL2Transaction(
+            FORCE_DEPLOYER,
+            DEPLOYER_SYSTEM_CONTRACT_ADDRESS,
+            _forceDeployCalldata,
+            _ergsLimit,
+            _factoryDeps,
+            QueueType.Deque
+        );
+    }
+}
