@@ -1,6 +1,8 @@
+pragma solidity ^0.8.0;
+
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-pragma solidity ^0.8.0;
+
 
 library UnsafeBytes {
     function readUint32(bytes memory _bytes, uint256 _start) internal pure returns (uint32 result, uint256 offset) {

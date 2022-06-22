@@ -1,6 +1,8 @@
+pragma solidity ^0.8.0;
+
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-pragma solidity ^0.8.0;
+
 
 import "./Base.sol";
 import "../Config.sol";
@@ -371,33 +373,7 @@ contract ExecutorFacet is Base, IExecutor {
     /// @param _opTree Type of priority op processing queue, from which the operations will be moved first
     /// NOTE: Priority operations are moved first with the specified `_opTree` queue and then from the another queue
     function movePriorityOpsFromBufferToMainQueue(uint256 _nOpsToMove, OpTree _opTree) external nonReentrant {
-        // #if TESTNET
         revert("t3"); // this functionality is disabled on testnet
-        // #else
-        if (s.priorityModeState.priorityModeEnabled) {
-            PriorityModeLib.updateEpoch(s);
-            require(s.priorityModeState.epoch == PriorityModeLib.Epoch.Delay, "A"); // in priority mode ops can be moved only in delay sub epoch
-        } else {
-            _requireActiveValidator(msg.sender);
-        }
-
-        // When an operation is added to the buffer heap, an expiration block is set for it as Ethereum block number before
-        // which operation should be moved to the main heap. After the move, the deadline for its processing from the main heap
-        // should be changed so that it can be processed `PRIORITY_EXPIRATION` blocks after the current block number.
-        uint32 expirationBlock = uint32(block.number + PRIORITY_EXPIRATION);
-
-        (uint256 gasUsedForMoving, uint64[] memory movedOperationIDs) = _movePriorityOps(
-            _nOpsToMove,
-            _opTree,
-            expirationBlock
-        );
-
-        // In order for the executor to be able to prove that he has spent enough gas to move priority operations,
-        // it is necessary to save the checkpoint with currect Ethereum block in the prefix sum array.
-        s.movementOperationsGasUsage.pushCheckpointWithCurrentBlockNumber(uint224(gasUsedForMoving));
-
-        emit MovePriorityOperationsFromBufferToHeap(expirationBlock, movedOperationIDs, _opTree);
-        // #endif
     }
 
     /// @notice Moves priority operations from the buffer to the main queue

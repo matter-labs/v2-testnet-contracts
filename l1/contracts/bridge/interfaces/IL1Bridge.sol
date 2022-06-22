@@ -1,6 +1,8 @@
+pragma solidity ^0.8.0;
+
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-pragma solidity ^0.8.0;
+
 
 import {IMailbox, QueueType, OpTree, L2Log, L2Message} from "../../zksync/interfaces/IZkSync.sol";
 

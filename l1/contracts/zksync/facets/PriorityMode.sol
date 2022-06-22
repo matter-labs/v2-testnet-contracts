@@ -1,6 +1,8 @@
+pragma solidity ^0.8.0;
+
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-pragma solidity ^0.8.0;
+
 
 import "../../common/interfaces/IERC20.sol";
 import "../interfaces/IPriorityMode.sol";
@@ -31,28 +33,7 @@ contract PriorityModeFacet is Base, IPriorityMode {
     /// @param _ethExpirationBlock Ethereum block number up to which heap priority operation should have been performed
     /// @return bool flag that is true if the Priority mode must be entered.
     function activatePriorityMode(uint32 _ethExpirationBlock) external nonReentrant returns (bool) {
-        // #if TESTNET
         return false;
-        // #else
-        bool canBeActivated = $$(EASY_PRIORITY_MODE) ||
-            !_bufferProcessingConditionFulfilled(_ethExpirationBlock) ||
-            !_mainQueueProcessingConditionFulfilled(_ethExpirationBlock);
-
-        if (!canBeActivated) {
-            return false;
-        }
-
-        if (!s.priorityModeState.priorityModeEnabled) {
-            // All blocks that have not been executed must be reverted
-            // so that the next executors can commit, verify and execute their blocks.
-            Utils.revertBlocks(s, 0);
-
-            PriorityModeLib.setNewPriorityModeState(s, PriorityModeLib.Epoch.Delay);
-            emit PriorityModeActivated();
-        }
-
-        return true;
-        // #endif
     }
 
     /// @dev Withdraw auction bid from the priority mode if withdrawals fails while processing the priority mode.
@@ -73,42 +54,14 @@ contract PriorityModeFacet is Base, IPriorityMode {
     /// NOTE: winning bid can be burned if creator does not process blocks for the complexity
     /// as he committed `PRIORITY_MODE_ACTION_WINNER_PROVING_TIME` seconds after the auction.
     function placeBidForBlocksProcessingAuction(uint112 _complexityRoot, OpTree _opTree) external payable nonReentrant {
-        // #if TESTNET
         revert("t1"); // this functionality is disabled on testnet
-        // #else
-        PriorityModeLib.updateEpoch(s);
-
-        PriorityModeLib.Epoch expectedSubEpoch = _opTree == OpTree.Full
-            ? PriorityModeLib.Epoch.CommonAuction
-            : PriorityModeLib.Epoch.RollupAuction;
-        require(expectedSubEpoch == s.priorityModeState.epoch, "b"); // current sub-epoch does not match the expected
-
-        uint256 complexity = uint256(_complexityRoot) * uint256(_complexityRoot);
-        bool isComplexityValid = PRIORITY_MODE_MINUMUM_PROCESSED_COMPLEXITY <= complexity &&
-            complexity <= PRIORITY_MODE_MAXIMUM_PROCESSED_COMPLEXITY;
-        require(isComplexityValid, "E"); // comitted complexity is not included in the allowed range
-
-        Auction.Bid memory previousMaxAuctionBid = s.currentMaxAuctionBid;
-        Auction.Bid memory newAuctionBid = Auction.Bid(address(msg.sender), uint96(msg.value), _complexityRoot);
-
-        require(previousMaxAuctionBid.significance() < newAuctionBid.significance(), "O");
-        // significance of the new bet is less or equal than the significance of the largest bet already placed
-
-        Auction.replaceBid(s, newAuctionBid, true);
-
-        emit NewPriorityModeAuctionBid(_opTree, address(msg.sender), newAuctionBid.bidAmount, complexity);
-        // #endif
     }
 
     /// @notice Changes the current sub-epoch to the new one if needed
     /// NOTE: Modifier of this method is not `public` because the internal version of this method -
     /// `_updatePriorityModeSubEpoch` is used when inheriting in the main and additional zkSync contract.
     function updatePriorityModeSubEpoch() external nonReentrant {
-        // #if TESTNET
         revert("t2"); // this functionality is disabled on testnet
-        // #else
-        PriorityModeLib.updateEpoch(s);
-        // #endif
     }
 
     /// @notice Checks that there are no priority operations from buffer heap that have expired

@@ -1,3 +1,5 @@
+pragma solidity ^0.8.0;
+
 // SPDX-License-Identifier: MIT
 
 /*
@@ -18,7 +20,7 @@ copies or substantial portions of the Software.
 
 */
 
-pragma solidity ^0.8.0;
+
 
 /// @title Multicall - Aggregate results from multiple read-only function calls
 contract Multicall {

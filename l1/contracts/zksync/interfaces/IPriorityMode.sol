@@ -1,6 +1,8 @@
+pragma solidity ^0.8;
+
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-pragma solidity ^0.8;
+
 
 import "../Operations.sol";
 import "../libraries/PriorityModeLib.sol";

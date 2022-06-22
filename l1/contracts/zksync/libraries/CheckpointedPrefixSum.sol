@@ -1,6 +1,8 @@
+pragma solidity ^0.8.0;
+
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-pragma solidity ^0.8.0;
+
 
 /// @author Matter Labs
 library CheckpointedPrefixSum {
@@ -67,23 +69,4 @@ library CheckpointedPrefixSum {
             _self.checkpoints[_fromCheckpointID].accumulatedSum;
     }
 
-    // #if DUMMY_PREFIX_SUM_LIB
-
-    /// @dev Adds a checkpoint with given Ethereum block number and value
-    /// NOTE: USE FOR TESTING ONLY
-    function DUMMY_pushCheckpoint(
-        PrefixSum storage _self,
-        uint32 _ethBlock,
-        uint224 _value
-    ) internal {
-        uint256 lastCheckpointID = _self.lastCheckpointID;
-
-        Checkpoint memory lastCheckpoint = _self.checkpoints[lastCheckpointID];
-        Checkpoint memory newCheckpoint = Checkpoint(_ethBlock, lastCheckpoint.accumulatedSum + _value);
-
-        _self.checkpoints[lastCheckpointID + 1] = newCheckpoint;
-        _self.lastCheckpointID += 1;
-    }
-
-    // #endif
 }

@@ -1,6 +1,8 @@
+pragma solidity ^0.8.0;
+
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-pragma solidity ^0.8.0;
+
 
 import "../interfaces/IMailbox.sol";
 
@@ -93,9 +95,7 @@ contract MailboxFacet is Base, IMailbox {
         bytes[] calldata _factoryDeps,
         QueueType _queueType
     ) internal returns (bytes32 canonicalTxHash) {
-        // #if TESTNET
         require(_queueType == QueueType.Deque);
-        // #endif
 
         uint64 expirationBlock = _calculateExpirationBlock(_queueType);
         uint64 txId = s.totalPriorityRequests;

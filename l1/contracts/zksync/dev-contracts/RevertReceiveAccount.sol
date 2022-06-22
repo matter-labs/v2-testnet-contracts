@@ -1,6 +1,8 @@
+pragma solidity ^0.8.0;
+
 // SPDX-License-Identifier: UNLICENSED
 
-pragma solidity ^0.8.0;
+
 
 /// @title RevertReceiveAccount - An account which reverts receiving funds depending on the flag
 /// @dev Used for testing failed withdrawals from the zkSync smart contract
