@@ -86,6 +86,7 @@ contract DefaultAccountAbstraction is IAccountAbstraction {
 
 		address recoveredAddress = ecrecover(_hash, v, r, s);
 
+		require(recoveredAddress != address(0));
 		require(recoveredAddress == address(this));
 
 		return EIP1271_SUCCESS_RETURN_VALUE;
