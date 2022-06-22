@@ -2,7 +2,7 @@
   "name": "@matterlabs/zksync-contracts",
   "version": "0.1.0",
   "license": "MIT",
-  "devDependencies": {
+  "dependencies": {
     "@openzeppelin/contracts": "4.6.0",
     "@openzeppelin/contracts-upgradeable": "4.6.0"
   }
