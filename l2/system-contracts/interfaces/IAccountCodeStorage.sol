@@ -7,7 +7,7 @@ interface IAccountCodeStorage {
 
     function getRawCodeHash(address _address) external view returns (bytes32 codeHash);
 
-    function getCodeHash(address _address) external returns (bytes32 codeHash);
+    function getCodeHash(uint256 _input) external returns (bytes32 codeHash);
     
-    function getCodeSize(address _address) external returns (uint256 codeSize);
+    function getCodeSize(uint256 _input) external returns (uint256 codeSize);
 }
