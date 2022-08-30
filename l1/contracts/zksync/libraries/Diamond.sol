@@ -4,15 +4,19 @@ pragma solidity ^0.8.0;
 
 
 
-import "./Utils.sol";
-
+/// @author Matter Labs
 library Diamond {
+    /// @dev Magic value that should be returned by diamond cut initialize contracts.
+    /// @dev Used to distinguish calls to contracts that were supposed to be used as diamond initializer from other contracts.
+    bytes32 constant DIAMOND_INIT_SUCCESS_RETURN_VALUE = keccak256("diamond.zksync.init");
+
+    /// @dev Storage position of `DiamondStorage` structure.
     bytes32 constant DIAMOND_STORAGE_POSITION = keccak256("diamond.standard.diamond.storage");
 
     /// @dev Utility struct that contains associated facet & meta information of selector
     /// @param facetAddress address of the facet which is connected with selector
     /// @param selectorPosition index in `FacetToSelectors.selectors` array, where is selector stored
-    /// @param isFreezable denotes whether the selector can be freezed
+    /// @param isFreezable denotes whether the selector can be frozen.
     struct SelectorToFacet {
         address facetAddress;
         uint16 selectorPosition;
@@ -20,7 +24,7 @@ library Diamond {
     }
 
     /// @dev Utility struct that contains associated selectors & meta information of facet
-    /// @param selectors list of all selectors that belongs to the facet
+    /// @param selectors list of all selectors that belong to the facet
     /// @param facetPosition index in `DiamondStorage.facets` array, where is facet stored
     struct FacetToSelectors {
         bytes4[] selectors;
@@ -31,7 +35,7 @@ library Diamond {
         mapping(bytes4 => SelectorToFacet) selectorToFacet;
         mapping(address => FacetToSelectors) facetToSelectors;
         address[] facets;
-        bool isFreezed;
+        bool isFrozen;
     }
 
     function getDiamondStorage() internal pure returns (DiamondStorage storage diamondStorage) {
@@ -67,17 +71,17 @@ library Diamond {
         for (uint256 i = 0; i < facetCuts.length; ++i) {
             Action action = facetCuts[i].action;
             address facet = facetCuts[i].facet;
-            bool isFreezable = facetCuts[i].isFreezable;
+            bool isFacetFreezable = facetCuts[i].isFreezable;
             bytes4[] memory selectors = facetCuts[i].selectors;
 
             require(selectors.length > 0, "B"); // no functions for diamond cut
 
             if (action == Action.Add) {
-                _addFunctions(facet, selectors, isFreezable);
+                _addFunctions(facet, selectors, isFacetFreezable);
             } else if (action == Action.Replace) {
-                _replaceFunctions(facet, selectors, isFreezable);
+                _replaceFunctions(facet, selectors, isFacetFreezable);
             } else if (action == Action.Remove) {
-                _removeFunctions(facet, selectors, isFreezable);
+                _removeFunctions(facet, selectors);
             } else {
                 revert("C"); // undefined diamond cut action
             }
@@ -94,7 +98,7 @@ library Diamond {
     function _addFunctions(
         address _facet,
         bytes4[] memory _selectors,
-        bool _isFreezable
+        bool _isFacetFreezable
     ) private {
         DiamondStorage storage ds = getDiamondStorage();
 
@@ -108,22 +112,22 @@ library Diamond {
             SelectorToFacet memory oldFacet = ds.selectorToFacet[selector];
             require(oldFacet.facetAddress == address(0), "J"); // facet for this selector already exists
 
-            _addOneFunction(_facet, selector, _isFreezable);
+            _addOneFunction(_facet, selector, _isFacetFreezable);
         }
     }
 
-    /// @dev Change associated facets to alredy known function selectors
+    /// @dev Change associated facets to already known function selectors
     /// NOTE: expect but NOT enforce that `_selectors` is NON-EMPTY array
     function _replaceFunctions(
         address _facet,
         bytes4[] memory _selectors,
-        bool _isFreezable
+        bool _isFacetFreezable
     ) private {
         DiamondStorage storage ds = getDiamondStorage();
 
         require(_facet != address(0), "K"); // cannot replace facet with zero address
 
-        // Add facet to the list of facets if the facet address is new one
+        // Add facet to the list of facets if the facet address is a new one
         _saveFacetIfNew(_facet);
 
         for (uint256 i = 0; i < _selectors.length; ++i) {
@@ -132,21 +136,16 @@ library Diamond {
             require(oldFacet.facetAddress != address(0), "L"); // it is impossible to replace the facet with zero address
 
             _removeOneFunction(oldFacet.facetAddress, selector);
-            _addOneFunction(_facet, selector, _isFreezable);
+            _addOneFunction(_facet, selector, _isFacetFreezable);
         }
     }
 
-    /// @dev Remove assocition with function and facet
+    /// @dev Remove association with function and facet
     /// NOTE: expect but NOT enforce that `_selectors` is NON-EMPTY array
-    function _removeFunctions(
-        address _facet,
-        bytes4[] memory _selectors,
-        bool _isFreezable
-    ) private {
+    function _removeFunctions(address _facet, bytes4[] memory _selectors) private {
         DiamondStorage storage ds = getDiamondStorage();
 
         require(_facet == address(0), "a1"); // facet address must be zero
-        require(!_isFreezable, "q3"); // facet should be unfreezable
 
         for (uint256 i = 0; i < _selectors.length; ++i) {
             bytes4 selector = _selectors[i];
@@ -157,8 +156,8 @@ library Diamond {
         }
     }
 
-    /// @dev Add address to the list of known facets if address not on the list yet
-    /// NOTE: should be called ONLY before adding new selector associated with the address
+    /// @dev Add address to the list of known facets if it is not on the list yet
+    /// NOTE: should be called ONLY before adding a new selector associated with the address
     function _saveFacetIfNew(address _facet) private {
         DiamondStorage storage ds = getDiamondStorage();
 
@@ -178,7 +177,7 @@ library Diamond {
     function _addOneFunction(
         address _facet,
         bytes4 _selector,
-        bool _isFreezable
+        bool _isSelectorFreezable
     ) private {
         DiamondStorage storage ds = getDiamondStorage();
 
@@ -186,7 +185,7 @@ library Diamond {
         ds.selectorToFacet[_selector] = SelectorToFacet({
             facetAddress: _facet,
             selectorPosition: selectorPosition,
-            isFreezable: _isFreezable
+            isFreezable: _isSelectorFreezable
         });
         ds.facetToSelectors[_facet].selectors.push(_selector);
     }
@@ -239,19 +238,19 @@ library Diamond {
 
         // Remove last element from the facets array
         ds.facets.pop();
-
-        // Remove only `facetPosition` and EXPECT that `selectors` is already empty
-        delete ds.facetToSelectors[_facet].facetPosition;
     }
 
     function _initializeDiamondCut(address _init, bytes memory _calldata) private {
         if (_init == address(0)) {
             require(_calldata.length == 0, "H"); // Non-empty calldata for zero address
         } else {
-            require(_init == address(this) || Utils.isContract(_init), "g2"); // init address is not a contract
-
-            (bool success, ) = _init.delegatecall(_calldata);
+            // Do not check whether `_init` is a contract since later we check that it returns data.
+            (bool success, bytes memory data) = _init.delegatecall(_calldata);
             require(success, "I"); // delegatecall failed
+
+            // Check that called contract returns magic value to make sure that contract logic
+            // supposed to be used as diamond cut initializer.
+            require(data.length == 32 && abi.decode(data, (bytes32)) == DIAMOND_INIT_SUCCESS_RETURN_VALUE, "lp");
         }
     }
 }

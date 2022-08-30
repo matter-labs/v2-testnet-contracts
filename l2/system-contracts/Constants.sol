@@ -9,14 +9,14 @@ import "./interfaces/IKnownCodesStorage.sol";
 import "./interfaces/IImmutableSimulator.sol";
 import "./interfaces/IEthToken.sol";
 import "./interfaces/IL1Messenger.sol";
-import "./ChainIdSimulator.sol";
+import "./SystemContext.sol";
 
 uint160 constant SYSTEM_CONTRACTS_OFFSET = 0x8000; // 2^15
 
 address constant ECRECOVER_SYSTEM_CONTRACT = address(0x01);
 address constant SHA256_SYSTEM_CONTRACT = address(0x02);
 
-address constant BOOTLOADER_FORMAL_ADDRESS = address(SYSTEM_CONTRACTS_OFFSET + 0x01);
+address payable constant BOOTLOADER_FORMAL_ADDRESS = payable(address(SYSTEM_CONTRACTS_OFFSET + 0x01));
 IAccountCodeStorage constant ACCOUNT_CODE_STORAGE_SYSTEM_CONTRACT = IAccountCodeStorage(address(SYSTEM_CONTRACTS_OFFSET + 0x02));
 INonceHolder constant NONCE_HOLDER_SYSTEM_CONTRACT = INonceHolder(address(SYSTEM_CONTRACTS_OFFSET + 0x03));
 IKnownCodesStorage constant KNOWN_CODE_STORAGE_CONTRACT = IKnownCodesStorage(address(SYSTEM_CONTRACTS_OFFSET + 0x04));
@@ -33,11 +33,11 @@ IEthToken constant ETH_TOKEN_SYSTEM_CONTRACT = IEthToken(address(SYSTEM_CONTRACT
 
 address constant KECCAK256_SYSTEM_CONTRACT = address(SYSTEM_CONTRACTS_OFFSET + 0x10);
 
-ChainIdSimulator constant CHAIN_ID_SIMULATOR = ChainIdSimulator(address(SYSTEM_CONTRACTS_OFFSET + 0x0b));
+SystemContext constant SYSTEM_CONTEXT_CONTRACT = SystemContext(address(SYSTEM_CONTRACTS_OFFSET + 0x0b));
 
 uint256 constant MAX_SYSTEM_CONTRACT_ADDRESS = 0xffff;
 
-bytes32 constant DEFAULT_AA_CODE_HASH = 0x00;
+bytes32 constant DEFAULT_ACCOUNT_CODE_HASH = 0x00;
 
 // The number of bytes that are published during the contract deployment
 // in addition to the bytecode itself.

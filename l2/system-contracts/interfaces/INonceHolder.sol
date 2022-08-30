@@ -3,6 +3,8 @@
 pragma solidity ^0.8.0;
 
 interface INonceHolder {
+    function getRawNonce(address _address) external view returns(uint256);
+
     function getAccountNonce() external view returns (uint256);
 
     function incrementNonce() external returns (uint256);

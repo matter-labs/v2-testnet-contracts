@@ -6,37 +6,48 @@ pragma solidity ^0.8.0;
 
 import "./Base.sol";
 import "../libraries/Diamond.sol";
+import "../libraries/PriorityQueue.sol";
 import "../interfaces/IGetters.sol";
 
 /// @title Getters Contract implements functions for getting contract state from outside the blockchain.
 /// @author Matter Labs
 contract GettersFacet is Base, IGetters {
+    using PriorityQueue for PriorityQueue.Queue;
+
     function getVerifier() external view returns (address) {
         return address(s.verifier);
     }
 
     function getGovernor() external view returns (address) {
-        return address(s.networkGovernor);
+        return address(s.governor);
     }
 
-    function getTotalBlocksCommitted() external view returns (uint32) {
+    function getTotalBlocksCommitted() external view returns (uint256) {
         return s.totalBlocksCommitted;
     }
 
-    function getTotalBlocksVerified() external view returns (uint32) {
+    function getTotalBlocksVerified() external view returns (uint256) {
         return s.totalBlocksVerified;
     }
 
-    function getTotalBlocksExecuted() external view returns (uint32) {
+    function getTotalBlocksExecuted() external view returns (uint256) {
         return s.totalBlocksExecuted;
     }
 
-    function getTotalPriorityRequests() external view returns (uint64) {
-        return s.totalPriorityRequests;
+    function getTotalPriorityTxs() external view returns (uint256) {
+        return s.priorityQueue.getTotalPriorityTxs();
+    }
+
+    function getLastProcessedPriorityTx() external view returns (uint256) {
+        return s.priorityQueue.getLastProcessedPriorityTx();
     }
 
     function isValidator(address _address) external view returns (bool) {
         return s.validators[_address];
+    }
+
+    function l2LogsRootHash(uint32 _blockNumber) external view returns (bytes32) {
+        return s.l2LogsRootHashes[_blockNumber];
     }
 
     // Diamond Loupe
@@ -97,9 +108,5 @@ contract GettersFacet is Base, IGetters {
     function facetAddresses() external view returns (address[] memory) {
         Diamond.DiamondStorage storage ds = Diamond.getDiamondStorage();
         return ds.facets;
-    }
-
-    function l2LogsRootHash(uint32 _blockNumber) external view returns (bytes32) {
-        return s.l2LogsRootHashes[_blockNumber];
     }
 }

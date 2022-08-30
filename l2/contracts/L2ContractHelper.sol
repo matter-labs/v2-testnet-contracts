@@ -42,3 +42,30 @@ library L2ContractHelper {
         return address(uint160(uint256(data)));
     }
 }
+
+struct Transaction {
+    uint256 txType;
+    uint256 from;
+    uint256 to;
+    uint256 ergsLimit;
+    uint256 ergsPerPubdataByteLimit;
+    uint256 maxFeePerErg;
+    uint256 maxPriorityFeePerErg;
+    uint256 paymaster;
+    // In the future, we might want to add some
+    // new fields to the struct. The `txData` struct
+    // is to be passed to account and any changes to its structure
+    // would mean a breaking change to these accounts. In order to prevent this,
+    // we should keep some fields as "reserved".
+    // It is also recommneded that their length is fixed, since
+    // it would allow easier proof integration (in case we will need
+    // some special circuit for preprocessing transactions).
+    uint256[6] reserved;
+    bytes data;
+    bytes signature;
+    bytes32[] factoryDeps;
+    bytes paymasterInput;
+    // Reserved dynamic type for the future use-case. Using it should be avoided,
+    // But it is still here, just in case we want to enable some additional functionality.
+    bytes reservedDynamic;
+}

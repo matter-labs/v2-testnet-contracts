@@ -37,11 +37,16 @@ abstract contract ReentrancyGuard {
     uint256 private constant _NOT_ENTERED = 1;
     uint256 private constant _ENTERED = 2;
 
-    function initializeReentrancyGuard() internal {
+    modifier reentrancyGuardInitializer() {
+        _initializeReentrancyGuard();
+        _;
+    }
+
+    function _initializeReentrancyGuard() private {
         uint256 lockSlotOldValue;
 
         // Storing an initial non-zero value makes deployment a bit more
-        // expensive, but in exchange every call to nonReentrant
+        // expensive but in exchange every call to nonReentrant
         // will be cheaper.
         assembly {
             lockSlotOldValue := sload(LOCK_FLAG_ADDRESS)

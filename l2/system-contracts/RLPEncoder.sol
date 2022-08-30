@@ -41,7 +41,7 @@ library RLPEncoder {
 	/// @notice Encodes the size of bytes in RLP format.
 	/// NOTE: panics if the length is 1, since the length encoding is ambiguous in this case.
 	function encodeNonSingleBytesLen(uint256 _len) internal pure returns (bytes memory) {
-		require(_len != 1);
+		assert(_len != 1);
 		return _encodeLength(_len, 0x80);
 	}
 

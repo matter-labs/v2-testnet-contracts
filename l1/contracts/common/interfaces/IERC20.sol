@@ -5,8 +5,9 @@ pragma solidity ^0.8.0;
 
 
 /**
- * @dev Interface of the ERC20 standard as defined in the EIP. Does not include
- * the optional functions; to access them see {ERC20Detailed}.
+ * @dev Interface of the ERC20 standard as defined in the EIP.
+ * @dev Unlike EIP-20 standard "transfer" and "transferFrom" functions do not return any value.
+ * This is made to be compatible with popular tokens that are implemented standard incorrectly.
  */
 interface IERC20 {
     /**
