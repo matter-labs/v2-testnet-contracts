@@ -5,6 +5,7 @@ pragma solidity ^0.8.0;
 
 
 import "./facets/Mailbox.sol";
+import "./libraries/Diamond.sol";
 import "../common/L2ContractHelper.sol";
 
 /// @author Matter Labs
@@ -14,14 +15,16 @@ contract DiamondUpgradeInit is MailboxFacet {
         bytes calldata _forceDeployCalldata,
         bytes[] calldata _factoryDeps,
         uint256 _ergsLimit
-    ) public payable {
+    ) external payable returns (bytes32) {
         _requestL2Transaction(
             FORCE_DEPLOYER,
             DEPLOYER_SYSTEM_CONTRACT_ADDRESS,
+            0,
             _forceDeployCalldata,
             _ergsLimit,
-            _factoryDeps,
-            QueueType.Deque
+            _factoryDeps
         );
+
+        return Diamond.DIAMOND_INIT_SUCCESS_RETURN_VALUE;
     }
 }
