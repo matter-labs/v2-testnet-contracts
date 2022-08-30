@@ -47,7 +47,7 @@ library L2ContractHelper {
         return L2_MESSANGER.sendToL1(_message);
     }
 
-    function hashL2Bytecode(bytes calldata _bytecode) internal pure returns (bytes32 hashedBytecode) {
+    function hashL2Bytecode(bytes memory _bytecode) internal pure returns (bytes32 hashedBytecode) {
         // Note that the length of the bytecode
         // should be provided in 32-byte words.
         uint256 bytecodeLen = _bytecode.length / 32;

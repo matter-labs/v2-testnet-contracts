@@ -14,6 +14,9 @@ import "../common/L2ContractHelper.sol";
 
 /// @author Matter Labs
 contract L1ERC20Bridge is IL1Bridge, ReentrancyGuard {
+    /// @dev zkSync smart contract that used to operate with L2 via asynchronous L2 <-> L1 communication
+    IMailbox immutable zkSyncMailbox;
+
     // TODO: evaluate constant
     uint256 constant DEPOSIT_ERGS_LIMIT = 2097152;
 
@@ -21,36 +24,44 @@ contract L1ERC20Bridge is IL1Bridge, ReentrancyGuard {
     uint256 constant DEPLOY_L2_BRIDGE_COUNTERPART_ERGS_LIMIT = 2097152;
 
     /// @dev mapping L2 block number => message number => flag
-    /// @dev Used to indicated that zkSync L2 -> L1 message was already processed
-    mapping(uint32 => mapping(uint256 => bool)) isL2ToL1MessageProcessed;
+    /// @dev Used to indicate that zkSync L2 -> L1 message was already processed
+    mapping(uint256 => mapping(uint256 => bool)) public isWithdrawalFinalized;
 
     /// @dev mapping account => L1 token address => L2 deposit transaction hash => amount
-    /// @dev Used for saving amount of deposited fund, to claim them in case if deposit transaction will failed
+    /// @dev Used for saving amount of deposited fund, to claim them in case the deposit transaction will fail
     mapping(address => mapping(address => mapping(bytes32 => uint256))) depositAmount;
 
     /// @dev address of deployed L2 bridge counterpart
     address public l2Bridge;
 
+    /// @dev address of factory that deploys proxy for L2 tokens.
+    address public l2TokenFactory;
+
     /// @dev bytecode hash of L2 token contract
-    bytes32 public l2StandardERC20BytecodeHash;
+    bytes32 public l2ProxyTokenBytecodeHash;
 
-    /// @dev zkSync smart contract that used to operate with L2 via asychronous L2 <-> L1 communication
-    IMailbox immutable zkSyncMailbox;
-
-    constructor(IMailbox _mailbox) {
+    /// @dev Contract is expected to be used as proxy implementation.
+    /// @dev Initialize the implementation to prevent Parity hack.
+    constructor(IMailbox _mailbox) reentrancyGuardInitializer {
         zkSyncMailbox = _mailbox;
     }
 
-    function initialize(bytes calldata _l2BridgeBytecode, bytes calldata _l2StandardERC20Bytecode) external {
-        require(l2Bridge == address(0)); // already initialized
-        require(l2StandardERC20BytecodeHash == 0x00); // already initialized
-        l2StandardERC20BytecodeHash = L2ContractHelper.hashL2Bytecode(_l2StandardERC20Bytecode);
-
-        initializeReentrancyGuard();
+    /// @dev Initializes a contract bridge for later use. Expected to be used in the proxy.
+    /// @dev During initialization deploys L2 bridge counterpart as well as provides some factory deps for it.
+    /// @param _factoryDeps A list of raw bytecodes that needed for deployment of L2 bridge.
+    /// @notice _factoryDeps[0] == a raw bytecode of L2 bridge.
+    /// @notice _factoryDeps[1] == a raw bytecode of token proxy.
+    /// @param _l2TokenFactory Pre-calculated address of L2 token beacon proxy.
+    /// @notice At the time of the function call, it is not yet deployed in L2, but knowledge of its address.
+    /// @notice is necessary for determining L2 token address by L1 address, see `l2TokenAddress(address)` function.
+    function initialize(bytes[] memory _factoryDeps, address _l2TokenFactory) external reentrancyGuardInitializer {
+        require(_factoryDeps.length == 2);
+        l2ProxyTokenBytecodeHash = L2ContractHelper.hashL2Bytecode(_factoryDeps[1]);
+        l2TokenFactory = _l2TokenFactory;
 
         bytes32 create2Salt = bytes32(0);
-        bytes memory create2Input = abi.encode(address(this), l2StandardERC20BytecodeHash);
-        bytes32 l2BridgeBytecodeHash = L2ContractHelper.hashL2Bytecode(_l2BridgeBytecode);
+        bytes memory create2Input = abi.encode(address(this), l2ProxyTokenBytecodeHash);
+        bytes32 l2BridgeBytecodeHash = L2ContractHelper.hashL2Bytecode(_factoryDeps[0]);
         bytes memory deployL2BridgeCalldata = abi.encodeWithSelector(
             IContractDeployer.create2.selector,
             create2Salt,
@@ -65,24 +76,20 @@ contract L1ERC20Bridge is IL1Bridge, ReentrancyGuard {
             l2BridgeBytecodeHash,
             keccak256(create2Input)
         );
-        bytes[] memory factoryDeps = new bytes[](2);
-        factoryDeps[0] = _l2BridgeBytecode;
-        factoryDeps[1] = _l2StandardERC20Bytecode;
 
         zkSyncMailbox.requestL2Transaction(
             DEPLOYER_SYSTEM_CONTRACT_ADDRESS,
+            0,
             deployL2BridgeCalldata,
             DEPLOY_L2_BRIDGE_COUNTERPART_ERGS_LIMIT,
-            factoryDeps,
-            QueueType.Deque
+            _factoryDeps
         );
     }
 
     function deposit(
         address _l2Receiver,
         address _l1Token,
-        uint256 _amount,
-        QueueType _queueType
+        uint256 _amount
     ) external payable nonReentrant returns (bytes32 txHash) {
         uint256 amount = _depositFunds(msg.sender, IERC20(_l1Token), _amount);
         require(amount > 0, "1T"); // empty deposit amount
@@ -90,13 +97,15 @@ contract L1ERC20Bridge is IL1Bridge, ReentrancyGuard {
         bytes memory l2TxCalldata = _getDepositL2Calldata(msg.sender, _l2Receiver, _l1Token, amount);
         txHash = zkSyncMailbox.requestL2Transaction{value: msg.value}(
             l2Bridge,
+            0,
             l2TxCalldata,
             DEPOSIT_ERGS_LIMIT,
-            new bytes[](0),
-            _queueType
+            new bytes[](0)
         );
 
         depositAmount[msg.sender][_l1Token][txHash] = amount;
+
+        emit DepositInitiated(msg.sender, _l2Receiver, _l1Token, _amount);
     }
 
     function _depositFunds(
@@ -143,7 +152,7 @@ contract L1ERC20Bridge is IL1Bridge, ReentrancyGuard {
         address _depositSender,
         address _l1Token,
         bytes32 _l2TxHash,
-        uint32 _l2BlockNumber,
+        uint256 _l2BlockNumber,
         uint256 _l2MessageIndex,
         bytes32[] calldata _merkleProof
     ) external nonReentrant {
@@ -156,15 +165,17 @@ contract L1ERC20Bridge is IL1Bridge, ReentrancyGuard {
 
         depositAmount[_depositSender][_l1Token][_l2TxHash] = 0;
         _withdrawFunds(_depositSender, IERC20(_l1Token), amount);
+
+        emit ClaimedFailedDeposit(_depositSender, _l1Token, amount);
     }
 
     function finalizeWithdrawal(
-        uint32 _l2BlockNumber,
+        uint256 _l2BlockNumber,
         uint256 _l2MessageIndex,
         bytes calldata _message,
         bytes32[] calldata _merkleProof
     ) external nonReentrant {
-        require(!isL2ToL1MessageProcessed[_l2BlockNumber][_l2MessageIndex], "pw");
+        require(!isWithdrawalFinalized[_l2BlockNumber][_l2MessageIndex], "pw");
 
         L2Message memory l2ToL1Message = L2Message({sender: l2Bridge, data: _message});
 
@@ -177,8 +188,10 @@ contract L1ERC20Bridge is IL1Bridge, ReentrancyGuard {
         );
         require(success, "nq");
 
-        isL2ToL1MessageProcessed[_l2BlockNumber][_l2MessageIndex] = true;
+        isWithdrawalFinalized[_l2BlockNumber][_l2MessageIndex] = true;
         _withdrawFunds(l1Receiver, IERC20(l1Token), amount);
+
+        emit WithdrawalFinalized(l1Receiver, l1Token, amount);
     }
 
     function _parseL2WithdrawalMessage(bytes memory _l2ToL1message)
@@ -215,10 +228,9 @@ contract L1ERC20Bridge is IL1Bridge, ReentrancyGuard {
     }
 
     function l2TokenAddress(address _l1Token) public view returns (address) {
-        bytes32 constructorInputHash = keccak256("");
+        bytes32 constructorInputHash = keccak256(abi.encode(address(l2TokenFactory), ""));
         bytes32 salt = bytes32(uint256(uint160(_l1Token)));
 
-        return
-            L2ContractHelper.computeCreate2Address(l2Bridge, salt, l2StandardERC20BytecodeHash, constructorInputHash);
+        return L2ContractHelper.computeCreate2Address(l2Bridge, salt, l2ProxyTokenBytecodeHash, constructorInputHash);
     }
 }
