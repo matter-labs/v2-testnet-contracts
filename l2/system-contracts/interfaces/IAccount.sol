@@ -15,3 +15,9 @@ interface IAccount {
 
 	function prePaymaster(Transaction calldata _transaction) external payable;
 }
+
+bytes4 constant ERC165_ACCOUNT_INTERFACE_ID = IAccount.validateTransaction.selector ^
+	IAccount.executeTransaction.selector ^
+	IAccount.executeTransactionFromOutside.selector ^
+	IAccount.payForTransaction.selector ^
+	IAccount.prePaymaster.selector;
