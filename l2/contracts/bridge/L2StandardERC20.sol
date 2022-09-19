@@ -13,7 +13,7 @@ contract L2StandardERC20 is ERC20Upgradeable, IL2StandardToken {
     /// @dev Describes whether there is a specific getter in the token.
     /// @notice Used to explicitly separate which getters the token has and which do not.
     /// @notice Different tokens in L1 can implement or not implement getter function as `name`/`symbol`/`decimals`,
-    /// @notice Our goal is store all getter that L1 token implement, and for other we keep it as unimplemented method.
+    /// @notice Our goal is to store all the getters that L1 token implements, and for others, we keep it as an unimplemented method.
     struct ERC20Getters {
         bool ignoreName;
         bool ignoreSymbol;
@@ -22,7 +22,7 @@ contract L2StandardERC20 is ERC20Upgradeable, IL2StandardToken {
 
     ERC20Getters availableGetters;
 
-    /// @dev The decimals of the token, that is used as as value for `decimals` getter function.
+    /// @dev The decimals of the token, that are used as a value for `decimals` getter function.
     /// @notice A private variable is used only for decimals, but not for `name` and `symbol`, because standard
     /// @notice OpenZeppelin token represents `name` and `symbol` as storage variables and `decimals` as constant.
     uint8 private decimals_;
@@ -33,7 +33,11 @@ contract L2StandardERC20 is ERC20Upgradeable, IL2StandardToken {
     /// @dev address of the L1 token that is
     address public override l1Address;
 
-    /// @dev Initializes a contract token for later use
+    /// @dev Contract is expected to be used as proxy implementation.
+    /// @dev Initialize the implementation to prevent Parity hack.
+    constructor() initializer {}
+
+    /// @notice Initializes a contract token for later use. Expected to be used in the proxy.
     /// @dev Stores the L1 address of the bridge and set `name`/`symbol`/`decimls` getters that L1 token has.
     function bridgeInitialize(address _l1Address, bytes memory _data) external initializer {
         require(l1Address == address(0), "in5"); // Is already initialized
@@ -42,7 +46,7 @@ contract L2StandardERC20 is ERC20Upgradeable, IL2StandardToken {
 
         l2Bridge = msg.sender;
 
-        // We parse the data exactly as they were created on L1 bridge
+        // We parse the data exactly as they were created on the L1 bridge
         (bytes memory nameBytes, bytes memory symbolBytes, bytes memory decimalsBytes) = abi.decode(
             _data,
             (bytes, bytes, bytes)
@@ -58,8 +62,8 @@ contract L2StandardERC20 is ERC20Upgradeable, IL2StandardToken {
         // NOTE: Solidity doesn't have a convenient way to try to decode a value:
         // - Decode them manually, i.e. write a function that will validate that data in the correct format
         // and return decoded value and a boolean value - whether it was possible to decode.
-        // - Use the standard abi.decode method, but wrap it into external call which error can be handled.
-        // We use second option here.
+        // - Use the standard abi.decode method, but wrap it into an external call in which error can be handled.
+        // We use the second option here.
 
         try ExternalDecoder.decodeString(nameBytes) returns (string memory nameString) {
             decodedName = nameString;
