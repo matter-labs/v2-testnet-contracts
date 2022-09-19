@@ -19,7 +19,7 @@ interface IDiamondCut {
 
     function approveEmergencyDiamondCutAsSecurityCouncilMember(bytes32 _diamondCutHash) external;
 
-    // FIXME: token holders should have an ability to cancel upgrade
+    // FIXME: token holders should have the ability to cancel the upgrade
 
     event DiamondCutProposal(Diamond.FacetCut[] _facetCuts, address _initAddress);
 

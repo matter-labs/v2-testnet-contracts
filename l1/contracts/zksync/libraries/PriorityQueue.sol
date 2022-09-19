@@ -4,217 +4,64 @@ pragma solidity ^0.8.0;
 
 
 
-import "../Operations.sol";
+/// @notice Priority Operation container
+/// @param canonicalTxHash Hashed priority operation data that is needed to process the operation
+/// @param expirationBlock Expiration block number (ETH block) for this request (must be satisfied before)
+/// @param layer2Tip Additional payment to the operator as an incentive to perform the operation
+struct PriorityOperation {
+    bytes32 canonicalTxHash;
+    uint64 expirationBlock;
+    uint192 layer2Tip;
+}
 
-/// @title queue with several data structure for storing priority operations
 /// @author Matter Labs
 library PriorityQueue {
-    using HeapLibrary for HeapLibrary.Heap;
-    using DequeLibrary for DequeLibrary.Deque;
+    using PriorityQueue for Queue;
 
-    /// @param heapBuffer structure to which priority operations with high priority are added before moving to the heap
-    /// @param heap structure to which priority operations are stored ordered by `L2Tip`
-    /// @param deque structure to which operations added cheaper than in the heap, but have smaller priority
     struct Queue {
-        HeapLibrary.Heap heapBuffer;
-        HeapLibrary.Heap heap;
-        DequeLibrary.Deque deque;
+        mapping(uint256 => PriorityOperation) data;
+        uint256 head;
+        uint256 tail;
     }
 
-    function pushToBufferHeap(
-        Queue storage _queue,
-        StoredOperations storage _storedOperations,
-        uint64 _operationID
-    ) internal {
-        _queue.heapBuffer.push(_storedOperations, _operationID);
+    function getLastProcessedPriorityTx(Queue storage _queue) internal view returns (uint256) {
+        return _queue.tail;
     }
 
-    function pushBackToDeque(Queue storage _queue, uint64 _operationID) internal {
-        _queue.deque.pushBack(_operationID);
+    function getTotalPriorityTxs(Queue storage _queue) internal view returns (uint256) {
+        return _queue.head;
     }
 
-    function pushToHeap(
-        Queue storage _queue,
-        StoredOperations storage _storedOperations,
-        uint64 _operationID
-    ) internal {
-        _queue.heap.push(_storedOperations, _operationID);
+    function getSize(Queue storage _queue) internal view returns (uint256) {
+        return uint256(_queue.head - _queue.tail);
     }
 
-    function popFromHeap(Queue storage _queue, StoredOperations storage _storedOperations) internal returns (uint64) {
-        return _queue.heap.pop(_storedOperations);
+    function isEmpty(Queue storage _queue) internal view returns (bool) {
+        return _queue.head == _queue.tail;
     }
 
-    function popFromBufferHeap(Queue storage _queue, StoredOperations storage _storedOperations)
-        internal
-        returns (uint64)
-    {
-        return _queue.heapBuffer.pop(_storedOperations);
+    function pushBack(Queue storage _queue, PriorityOperation memory _operation) internal {
+        // Save value into the stack to avoid double reading from the storage
+        uint256 head = _queue.head;
+
+        _queue.data[head] = _operation;
+        _queue.head = head + 1;
     }
 
-    function popFrontFromDeque(Queue storage _queue) internal returns (uint64) {
-        return _queue.deque.popFront();
+    function front(Queue storage _queue) internal view returns (PriorityOperation memory) {
+        require(!_queue.isEmpty(), "D"); // priority queue is empty
+
+        return _queue.data[_queue.tail];
     }
 
-    function frontDequeOperationID(Queue storage _queue) internal view returns (uint64) {
-        return _queue.deque.front();
-    }
+    function popFront(Queue storage _queue) internal returns (PriorityOperation memory operation) {
+        require(!_queue.isEmpty(), "s"); // priority queue is empty
 
-    function frontHeapBufferOperationID(Queue storage _queue) internal view returns (uint64) {
-        return _queue.heapBuffer.top();
-    }
+        // Save value into the stack to avoid double reading from the storage
+        uint256 tail = _queue.tail;
 
-    function frontHeapOperationID(Queue storage _queue) internal view returns (uint64) {
-        return _queue.heap.top();
-    }
-
-    function heapBufferSize(Queue storage _queue) internal view returns (uint256) {
-        return _queue.heapBuffer.getSize();
-    }
-
-    function heapSize(Queue storage _queue) internal view returns (uint256) {
-        return _queue.heap.getSize();
-    }
-
-    function dequeSize(Queue storage _queue) internal view returns (uint256) {
-        return _queue.deque.getSize();
-    }
-
-    function getTotalHeapsHeight(Queue storage _queue) internal view returns (uint64) {
-        return _queue.heap.getHeight() + _queue.heapBuffer.getHeight();
-    }
-}
-
-/// @title HeapLibrary implementation of heap data structure
-/// @author Matter Labs
-library HeapLibrary {
-    struct Heap {
-        uint64[] data;
-        uint64 height;
-    }
-
-    function top(Heap storage _heap) internal view returns (uint64 _operationID) {
-        require(_heap.data.length > 0, "e"); // heap is empty
-
-        return _heap.data[0];
-    }
-
-    function push(
-        Heap storage _heap,
-        StoredOperations storage _storedOperations,
-        uint64 _operationID
-    ) internal {
-        _heap.data.push(_operationID);
-        uint256 childIndex = _heap.data.length - 1;
-
-        while (
-            childIndex > 0 &&
-            _storedOperations.inner[_heap.data[childIndex]].layer2Tip >
-            _storedOperations.inner[_heap.data[(childIndex - 1) / 2]].layer2Tip
-        ) {
-            uint256 parrentIndex = (childIndex - 1) / 2;
-            _heap.data[childIndex] = _heap.data[parrentIndex];
-            _heap.data[parrentIndex] = _operationID;
-
-            childIndex = parrentIndex;
-        }
-
-        // Check that number of elements in the heap after addition is a power of two
-        // if so then increase the heap height by 1
-        uint256 len = _heap.data.length;
-        if ((len & (len - 1)) == 0) {
-            _heap.height += 1;
-        }
-    }
-
-    function pop(Heap storage _heap, StoredOperations storage _storedOperations)
-        internal
-        returns (uint64 _operationID)
-    {
-        require(_heap.data.length > 0, "w"); // heap is empty
-
-        uint64 result = _heap.data[0];
-
-        _heap.data[0] = _heap.data[_heap.data.length - 1];
-        _heap.data.pop();
-
-        uint256 parrentIndex = 0;
-        while (2 * parrentIndex + 1 < _heap.data.length) {
-            uint256 childIndex = 2 * parrentIndex + 1;
-            if (
-                childIndex + 1 < _heap.data.length &&
-                _storedOperations.inner[_heap.data[childIndex]].layer2Tip <
-                _storedOperations.inner[_heap.data[childIndex + 1]].layer2Tip
-            ) {
-                childIndex += 1;
-            }
-
-            if (
-                _storedOperations.inner[_heap.data[childIndex]].layer2Tip >
-                _storedOperations.inner[_heap.data[parrentIndex]].layer2Tip
-            ) {
-                uint64 tmpValue = _heap.data[parrentIndex];
-                _heap.data[parrentIndex] = _heap.data[childIndex];
-                _heap.data[childIndex] = tmpValue;
-
-                parrentIndex = childIndex;
-            } else {
-                break;
-            }
-        }
-
-        // Check that number of elements in the heap before removing was a power of two
-        // if so then decrease the heap height by 1
-        uint256 len = _heap.data.length;
-        if ((len & (len + 1)) == 0) {
-            _heap.height -= 1;
-        }
-
-        return result;
-    }
-
-    function getSize(Heap storage _heap) internal view returns (uint256) {
-        return _heap.data.length;
-    }
-
-    function getHeight(Heap storage _heap) internal view returns (uint64) {
-        return _heap.height;
-    }
-}
-
-/// @title DequeLibrary implementation of deque data structure
-/// @author Matter Labs
-library DequeLibrary {
-    struct Deque {
-        mapping(uint128 => uint64) data;
-        uint128 head;
-        uint128 tail;
-    }
-
-    function getSize(Deque storage _deque) internal view returns (uint256) {
-        return uint256(_deque.head - _deque.tail);
-    }
-
-    function isEmpty(Deque storage _deque) internal view returns (bool) {
-        return _deque.head == _deque.tail;
-    }
-
-    function pushBack(Deque storage _deque, uint64 _operationID) internal {
-        _deque.data[_deque.head] = _operationID;
-        _deque.head += 1;
-    }
-
-    function front(Deque storage _deque) internal view returns (uint64) {
-        require(!isEmpty(_deque), "D"); // deque is empty
-
-        return _deque.data[_deque.tail];
-    }
-
-    function popFront(Deque storage _deque) internal returns (uint64 frontOperationID) {
-        require(!isEmpty(_deque), "s"); // deque is empty
-
-        frontOperationID = _deque.data[_deque.tail];
-        delete _deque.data[_deque.tail];
-        _deque.tail += 1;
+        operation = _queue.data[tail];
+        delete _queue.data[tail];
+        _queue.tail = tail + 1;
     }
 }

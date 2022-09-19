@@ -9,15 +9,19 @@ interface IGetters {
 
     function getGovernor() external view returns (address);
 
-    function getTotalBlocksCommitted() external view returns (uint32);
+    function getTotalBlocksCommitted() external view returns (uint256);
 
-    function getTotalBlocksVerified() external view returns (uint32);
+    function getTotalBlocksVerified() external view returns (uint256);
 
-    function getTotalBlocksExecuted() external view returns (uint32);
+    function getTotalBlocksExecuted() external view returns (uint256);
 
-    function getTotalPriorityRequests() external view returns (uint64);
+    function getTotalPriorityTxs() external view returns (uint256);
+
+    function getLastProcessedPriorityTx() external view returns (uint256);
 
     function isValidator(address _address) external view returns (bool);
+
+    function l2LogsRootHash(uint32 blockNumber) external view returns (bytes32 hash);
 
     // Diamond Loupe
 
@@ -47,6 +51,4 @@ interface IGetters {
     function facetsExtended() external view returns (FacetExtended[] memory);
 
     function facetAddresses() external view returns (address[] memory facets);
-
-    function l2LogsRootHash(uint32 blockNumber) external view returns (bytes32 hash);
 }
