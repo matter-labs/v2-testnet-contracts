@@ -52,7 +52,7 @@ contract L2ETHBridge is IL2Bridge {
     }
 
     /// @dev initiate withdrawal ethers from L2 contract to the L1.
-    /// NOTE: In order to get funds on L1, receiver should finalise deposit on L1 counterpart.
+    /// NOTE: In order to get funds on L1, the receiver should finalize the deposit on the L1 counterpart.
     function withdraw(
         address _l1Receiver,
         address _l2Token,
