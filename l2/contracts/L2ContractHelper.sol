@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.0;
 
-interface IL2Messanger {
+interface IL2Messenger {
     function sendToL1(bytes memory _message) external returns (bytes32);
 }
 
@@ -19,13 +19,13 @@ uint160 constant SYSTEM_CONTRACTS_OFFSET = 0x8000; // 2^15
 
 address constant BOOTLOADER_ADDRESS = address(SYSTEM_CONTRACTS_OFFSET + 0x01);
 address constant VALUE_SIMULATOR_SYSTEM_CONTRACT_ADDRESS = address(SYSTEM_CONTRACTS_OFFSET + 0x09);
-IL2Messanger constant L2_MESSANGER = IL2Messanger(address(SYSTEM_CONTRACTS_OFFSET + 0x08));
+IL2Messenger constant L2_MESSENGER = IL2Messenger(address(SYSTEM_CONTRACTS_OFFSET + 0x08));
 
 library L2ContractHelper {
     bytes32 constant CREATE2_PREFIX = keccak256("zksyncCreate2");
 
     function sendMessageToL1(bytes memory _message) internal returns (bytes32) {
-        return L2_MESSANGER.sendToL1(_message);
+        return L2_MESSENGER.sendToL1(_message);
     }
 
     function computeCreate2Address(

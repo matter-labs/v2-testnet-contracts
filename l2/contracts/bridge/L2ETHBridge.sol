@@ -11,17 +11,19 @@ import "./interfaces/IL2StandardToken.sol";
 
 /**
  * @author Matter Labs
- * @dev This contract is used for bridging of the ether from L1.
+ * @dev This contract is used for bridging the ether from L1.
  */
 contract L2ETHBridge is IL2Bridge {
     /// @dev The total amount of tokens that have been minted.
     uint256 public totalSupply;
 
+    /// @dev Mapping of address to the balance.
     mapping(address => uint256) public balanceOf;
 
-    /// @dev address of the L1 bridge counterpart.
+    /// @dev Address of the L1 bridge counterpart.
     address public override l1Bridge;
 
+    /// @dev System contract that is responsible for storing and changing ether balances.
     IL2StandardToken constant ETH_TOKEN_SYSTEM_CONTRACT_ADDRESS = IL2StandardToken(address(0x800a));
 
     /// @dev Ether native coin has no real address on L1, so a conventional zero address is used.
@@ -35,7 +37,7 @@ contract L2ETHBridge is IL2Bridge {
 
     /// @dev handle a deposit transaction from the L1 bridge.
     function finalizeDeposit(
-        address, // _l1Sender
+        address _l1Sender,
         address _l2Receiver,
         address _l1Token,
         uint256 _amount,
@@ -45,10 +47,12 @@ contract L2ETHBridge is IL2Bridge {
         require(_l1Token == CONVENTIONAL_ETH_ADDRESS);
 
         ETH_TOKEN_SYSTEM_CONTRACT_ADDRESS.bridgeMint(_l2Receiver, _amount);
+
+        emit FinalizeDeposit(_l1Sender, _l2Receiver, CONVENTIONAL_ETH_ADDRESS, _amount);
     }
 
     /// @dev initiate withdrawal ethers from L2 contract to the L1.
-    /// NOTE: In order to get funds on L1, receiver should finilise deposit on L1 counterpart.
+    /// NOTE: In order to get funds on L1, the receiver should finalize the deposit on the L1 counterpart.
     function withdraw(
         address _l1Receiver,
         address _l2Token,
@@ -59,6 +63,8 @@ contract L2ETHBridge is IL2Bridge {
         ETH_TOKEN_SYSTEM_CONTRACT_ADDRESS.bridgeBurn(msg.sender, _amount);
         bytes memory message = _getL1WithdrawMessage(_l1Receiver, _amount);
         L2ContractHelper.sendMessageToL1(message);
+
+        emit WithdrawalInitiated(msg.sender, _l1Receiver, CONVENTIONAL_ETH_ADDRESS, _amount);
     }
 
     /// @dev Get the message to be sent to L1 to initiate a withdrawal.
