@@ -6,6 +6,7 @@ import "../interfaces/IMailbox.sol";
 import "../libraries/Merkle.sol";
 import "../libraries/PriorityQueue.sol";
 import "../Storage.sol";
+import "../Config.sol";
 import "../../common/L2ContractHelper.sol";
 import "./Base.sol";
 

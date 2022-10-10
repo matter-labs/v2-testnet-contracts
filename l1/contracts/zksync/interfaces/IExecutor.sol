@@ -58,17 +58,18 @@ interface IExecutor {
     /// @notice Recursive proof input data (individual commitments are constructed onchain)
     /// TODO: The verifier integration is not finished yet, change the structure for compatibility later
     struct ProofInput {
-        uint256[] recursiveInput;
-        uint256[] proof;
-        uint256[] commitments;
-        uint8[] vkIndexes;
-        uint256[16] subproofsLimbs;
+        uint256[] recurisiveAggregationInput;
+        uint256[] serializedProof;
     }
 
     function commitBlocks(StoredBlockInfo calldata _lastCommittedBlockData, CommitBlockInfo[] calldata _newBlocksData)
         external;
 
-    function proveBlocks(StoredBlockInfo[] calldata _committedBlocks, ProofInput memory _proof) external;
+    function proveBlocks(
+        StoredBlockInfo calldata _prevBlock,
+        StoredBlockInfo[] calldata _committedBlocks,
+        ProofInput calldata _proof
+    ) external;
 
     function executeBlocks(StoredBlockInfo[] calldata _blocksData) external;
 

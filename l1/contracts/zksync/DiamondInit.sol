@@ -23,6 +23,7 @@ contract DiamondInit is Base {
         address _validator,
         bytes32 _genesisBlockHash,
         uint64 _genesisIndexRepeatedStorageChanges,
+        VerifierParams calldata _verifierParams,
         bool _zkPorterIsAvailable,
         bytes32 _l2BootloaderBytecodeHash,
         bytes32 _l2DefaultAccountBytecodeHash
@@ -44,6 +45,7 @@ contract DiamondInit is Base {
         );
 
         s.storedBlockHashes[0] = keccak256(abi.encode(storedBlockZero));
+        s.verifierParams = _verifierParams;
         s.zkPorterIsAvailable = _zkPorterIsAvailable;
         s.l2BootloaderBytecodeHash = _l2BootloaderBytecodeHash;
         s.l2DefaultAccountBytecodeHash = _l2DefaultAccountBytecodeHash;

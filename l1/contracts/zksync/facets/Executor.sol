@@ -5,6 +5,8 @@ pragma solidity ^0.8.0;
 import "./Base.sol";
 import "../Config.sol";
 import "../interfaces/IExecutor.sol";
+import "../libraries/UncheckedMath.sol";
+import "../libraries/PairingsBn254.sol";
 import "../libraries/PriorityQueue.sol";
 import "../../common/libraries/UnsafeBytes.sol";
 import "../../common/L2ContractHelper.sol";
@@ -12,6 +14,7 @@ import "../../common/L2ContractHelper.sol";
 /// @title zkSync Executor contract capable of processing events emitted in the zkSync protocol.
 /// @author Matter Labs
 contract ExecutorFacet is Base, IExecutor {
+    using UncheckedMath for uint256;
     using PriorityQueue for PriorityQueue.Queue;
 
     /// @dev Process one block commit using the previous block StoredBlockInfo
@@ -206,44 +209,115 @@ contract ExecutorFacet is Base, IExecutor {
 
     /// @notice Blocks commitment verification.
     /// @notice Only verifies block commitments without any other processing
-    function proveBlocks(StoredBlockInfo[] calldata _committedBlocks, ProofInput memory _proof) external nonReentrant {
-        uint256 i;
+    function proveBlocks(
+        StoredBlockInfo calldata _prevBlock,
+        StoredBlockInfo[] calldata _committedBlocks,
+        ProofInput calldata _proof
+    ) external nonReentrant onlyValidator {
+        // Save the variables into the stack to save gas on reading them later
         uint256 currentTotalBlocksVerified = s.totalBlocksVerified;
+        uint256 committedBlocksLength = _committedBlocks.length;
 
-        // Ignoring the `_committedBlocks` which are already proved.
-        bytes32 firstUnverifiedBlockHash = s.storedBlockHashes[currentTotalBlocksVerified + 1];
-        while (_hashStoredBlockInfo(_committedBlocks[i]) != firstUnverifiedBlockHash) {
-            unchecked {
-                ++i;
-            }
-        }
+        // Save the variable from the storage to memory to save gas
+        VerifierParams memory verifierParams = s.verifierParams;
 
-        // Check that all other blocks are committed and have the same commitment as `_proof`.
-        while (i < _committedBlocks.length) {
+        // Initialize the array, that will be used as public input to the ZKP
+        uint256[] memory proofPublicInput = new uint256[](committedBlocksLength);
+
+        // Check that the block passed by the validator is indeed the first unverified block
+        require(_hashStoredBlockInfo(_prevBlock) == s.storedBlockHashes[currentTotalBlocksVerified], "t1");
+
+        bytes32 prevBlockCommitment = _prevBlock.commitment;
+        for (uint256 i = 0; i < committedBlocksLength; i = i.uncheckedInc()) {
             require(
-                _hashStoredBlockInfo(_committedBlocks[i]) == s.storedBlockHashes[currentTotalBlocksVerified + 1],
+                _hashStoredBlockInfo(_committedBlocks[i]) ==
+                    s.storedBlockHashes[currentTotalBlocksVerified.uncheckedInc()],
                 "o1"
             );
-            // TODO: restore after verifier will be integrated
-            // require(_proof.commitments[i] & INPUT_MASK == uint256(_committedBlocks[i].commitment) & INPUT_MASK, "o"); // incorrect block commitment in proof
 
-            unchecked {
-                ++i;
-                ++currentTotalBlocksVerified;
-            }
+            bytes32 currentBlockCommitment = _committedBlocks[i].commitment;
+            proofPublicInput[i] = _getBlockProofPublicInput(
+                prevBlockCommitment,
+                currentBlockCommitment,
+                _proof,
+                verifierParams
+            );
+
+            prevBlockCommitment = currentBlockCommitment;
+            currentTotalBlocksVerified = currentTotalBlocksVerified.uncheckedInc();
         }
 
-        bool success = s.verifier.verifyAggregatedBlockProof(
-            _proof.recursiveInput,
-            _proof.proof,
-            _proof.vkIndexes,
-            _proof.commitments,
-            _proof.subproofsLimbs
-        );
-        require(success, "p"); // Aggregated proof verification fail
+        // #if DUMMY_VERIFIER == false
+        // Check that all other blocks are committed and have the same commitment as `_proof`.
+        bool successVerifyProof = s.verifier.verify_serialized_proof(proofPublicInput, _proof.serializedProof);
+        require(successVerifyProof, "p"); // Proof verification fail
+
+        // Verify the recursive part that was given to us through the public input
+        bool successProofAggregation = _verifyRecursivePartOfProof(_proof.recurisiveAggregationInput);
+        require(successProofAggregation, "hh"); // Proof aggregation must be valid
+        // #endif
 
         require(currentTotalBlocksVerified <= s.totalBlocksCommitted, "q");
         s.totalBlocksVerified = currentTotalBlocksVerified;
+    }
+
+    /// @dev Gets zk proof public input
+    function _getBlockProofPublicInput(
+        bytes32 _prevBlockCommitment,
+        bytes32 _currentBlockCommitment,
+        ProofInput calldata _proof,
+        VerifierParams memory _verifierParams
+    ) internal pure returns (uint256) {
+        return
+            uint256(
+                keccak256(
+                    abi.encode(
+                        _prevBlockCommitment,
+                        _currentBlockCommitment,
+                        _verifierParams.recursionNodeLevelVkHash,
+                        _verifierParams.recursionLeafLevelVkHash,
+                        _verifierParams.recursionCircuitsSetVksHash,
+                        _proof.recurisiveAggregationInput
+                    )
+                )
+            );
+    }
+
+    /// @dev Verify a part of the zkp, that is responsible for the aggregation
+    function _verifyRecursivePartOfProof(uint256[] calldata _recurisiveAggregationInput) internal view returns (bool) {
+        require(_recurisiveAggregationInput.length == 4);
+
+        PairingsBn254.G1Point memory pairWithGen = PairingsBn254.new_g1_checked(
+            _recurisiveAggregationInput[0],
+            _recurisiveAggregationInput[1]
+        );
+        PairingsBn254.G1Point memory pairWithX = PairingsBn254.new_g1_checked(
+            _recurisiveAggregationInput[2],
+            _recurisiveAggregationInput[3]
+        );
+
+        PairingsBn254.G2Point memory g2Gen = PairingsBn254.new_g2(
+            [
+                0x198e9393920d483a7260bfb731fb5d25f1aa493335a9e71297e485b7aef312c2,
+                0x1800deef121f1e76426a00665e5c4479674322d4f75edadd46debd5cd992f6ed
+            ],
+            [
+                0x090689d0585ff075ec9e99ad690c3395bc4b313370b38ef355acdadcd122975b,
+                0x12c85ea5db8c6deb4aab71808dcb408fe3d1e7690c43d37b4ce6cc0166fa7daa
+            ]
+        );
+        PairingsBn254.G2Point memory g2X = PairingsBn254.new_g2(
+            [
+                0x260e01b251f6f1c7e7ff4e580791dee8ea51d87a358e038b4efe30fac09383c1,
+                0x0118c4d5b837bcc2bc89b5b398b5974e9f5944073b32078b7e231fec938883b0
+            ],
+            [
+                0x04fc6369f7110fe3d25156c1bb9a72859cf2a04641f99ba4ee413c80da6a5fe4,
+                0x22febda3c0c0632a56475b4214e5615e11e6dd3f96e6cea2854a87d4dacc5e55
+            ]
+        );
+
+        return PairingsBn254.pairingProd2(pairWithGen, g2Gen, pairWithX, g2X);
     }
 
     /// @notice Reverts unexecuted blocks

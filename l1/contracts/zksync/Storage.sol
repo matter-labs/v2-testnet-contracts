@@ -52,6 +52,13 @@ struct L2Message {
     bytes data;
 }
 
+/// @notice Part of the configuration parameters of ZKP circuits
+struct VerifierParams {
+    bytes32 recursionNodeLevelVkHash;
+    bytes32 recursionLeafLevelVkHash;
+    bytes32 recursionCircuitsSetVksHash;
+}
+
 /// @dev storing all storage variables for zkSync facets
 /// NOTE: It is used in a proxy, so it is possible to add new variables to the end
 /// NOTE: but NOT to modify already existing variables or change their order
@@ -79,6 +86,8 @@ struct AppStorage {
     mapping(uint256 => bytes32) l2LogsRootHashes;
     /// @dev Container that stores transactions requested from L1
     PriorityQueue.Queue priorityQueue;
+    /// @notice Part of the configuration parameters of ZKP circuits. Used as an input for the verifier smart contract
+    VerifierParams verifierParams;
     /// @notice Bytecode hash of bootloader program.
     /// @dev Used as an input to zkp-circuit.
     bytes32 l2BootloaderBytecodeHash;
