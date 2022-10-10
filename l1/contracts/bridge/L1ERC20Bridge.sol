@@ -1,8 +1,6 @@
-pragma solidity ^0.8.0;
-
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-
+pragma solidity ^0.8.0;
 
 import "./interfaces/IL1Bridge.sol";
 import "./interfaces/IL2Bridge.sol";
@@ -54,19 +52,23 @@ contract L1ERC20Bridge is IL1Bridge, ReentrancyGuard {
     /// @param _l2TokenFactory Pre-calculated address of L2 token beacon proxy.
     /// @notice At the time of the function call, it is not yet deployed in L2, but knowledge of its address.
     /// @notice is necessary for determining L2 token address by L1 address, see `l2TokenAddress(address)` function.
-    function initialize(bytes[] memory _factoryDeps, address _l2TokenFactory) external reentrancyGuardInitializer {
+    /// @param _governor Address which can change l2 token implementation.
+    function initialize(
+        bytes[] memory _factoryDeps,
+        address _l2TokenFactory,
+        address _governor
+    ) external reentrancyGuardInitializer {
         require(_factoryDeps.length == 2);
         l2ProxyTokenBytecodeHash = L2ContractHelper.hashL2Bytecode(_factoryDeps[1]);
         l2TokenFactory = _l2TokenFactory;
 
         bytes32 create2Salt = bytes32(0);
-        bytes memory create2Input = abi.encode(address(this), l2ProxyTokenBytecodeHash);
+        bytes memory create2Input = abi.encode(address(this), l2ProxyTokenBytecodeHash, _governor);
         bytes32 l2BridgeBytecodeHash = L2ContractHelper.hashL2Bytecode(_factoryDeps[0]);
         bytes memory deployL2BridgeCalldata = abi.encodeWithSelector(
             IContractDeployer.create2.selector,
             create2Salt,
             l2BridgeBytecodeHash,
-            0,
             create2Input
         );
 
@@ -154,9 +156,17 @@ contract L1ERC20Bridge is IL1Bridge, ReentrancyGuard {
         bytes32 _l2TxHash,
         uint256 _l2BlockNumber,
         uint256 _l2MessageIndex,
+        uint16 _l2TxNumberInBlock,
         bytes32[] calldata _merkleProof
     ) external nonReentrant {
-        L2Log memory l2Log = L2Log({sender: BOOTLOADER_ADDRESS, key: _l2TxHash, value: bytes32(0)});
+        L2Log memory l2Log = L2Log({
+            l2ShardId: 0,
+            isService: true,
+            txNumberInBlock: _l2TxNumberInBlock,
+            sender: BOOTLOADER_ADDRESS,
+            key: _l2TxHash,
+            value: bytes32(0)
+        });
         bool success = zkSyncMailbox.proveL2LogInclusion(_l2BlockNumber, _l2MessageIndex, l2Log, _merkleProof);
         require(success);
 
@@ -172,12 +182,17 @@ contract L1ERC20Bridge is IL1Bridge, ReentrancyGuard {
     function finalizeWithdrawal(
         uint256 _l2BlockNumber,
         uint256 _l2MessageIndex,
+        uint16 _l2TxNumberInBlock,
         bytes calldata _message,
         bytes32[] calldata _merkleProof
     ) external nonReentrant {
         require(!isWithdrawalFinalized[_l2BlockNumber][_l2MessageIndex], "pw");
 
-        L2Message memory l2ToL1Message = L2Message({sender: l2Bridge, data: _message});
+        L2Message memory l2ToL1Message = L2Message({
+            txNumberInBlock: _l2TxNumberInBlock,
+            sender: l2Bridge,
+            data: _message
+        });
 
         (address l1Receiver, address l1Token, uint256 amount) = _parseL2WithdrawalMessage(l2ToL1Message.data);
         bool success = zkSyncMailbox.proveL2MessageInclusion(

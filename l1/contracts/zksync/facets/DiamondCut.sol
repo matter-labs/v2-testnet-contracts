@@ -1,8 +1,6 @@
-pragma solidity ^0.8.0;
-
 // SPDX-License-Identifier: MIT
 
-
+pragma solidity ^0.8.0;
 
 import "../interfaces/IDiamondCut.sol";
 import "../libraries/Diamond.sol";
@@ -72,6 +70,7 @@ contract DiamondCutFacet is Base, IDiamondCut {
         emit DiamondCutProposalExecution(_diamondCut);
     }
 
+    /// @notice Instantly pause the functionality of all freezable facets & their selectors
     function emergencyFreezeDiamond() external onlyGovernor {
         Diamond.DiamondStorage storage diamondStorage = Diamond.getDiamondStorage();
         require(!diamondStorage.isFrozen, "a9"); // diamond proxy is frozen already
@@ -83,6 +82,7 @@ contract DiamondCutFacet is Base, IDiamondCut {
         emit EmergencyFreeze();
     }
 
+    /// @notice Unpause the functionality of all freezable facets & their selectors
     function unfreezeDiamond() external onlyGovernor {
         Diamond.DiamondStorage storage diamondStorage = Diamond.getDiamondStorage();
 
@@ -95,6 +95,8 @@ contract DiamondCutFacet is Base, IDiamondCut {
         emit Unfreeze();
     }
 
+    /// @notice Gives another approval for the instant upgrade (diamond cut) by the security council member
+    /// @param _diamondCutHash The hash of the diamond cut that security council members want to approve. Needed to prevent unintentional approvals, including reorg attacks
     function approveEmergencyDiamondCutAsSecurityCouncilMember(bytes32 _diamondCutHash) external {
         require(s.diamondCutStorage.securityCouncilMembers[msg.sender], "a9"); // not a security council member
         require(
@@ -113,6 +115,8 @@ contract DiamondCutFacet is Base, IDiamondCut {
         emit EmergencyDiamondCutApproved(msg.sender);
     }
 
+    /// @dev Set up the proposed diamond cut state to the default values
+    /// @return Whether the proposal is reset or it was already empty
     function _resetProposal() private returns (bool) {
         if (s.diamondCutStorage.proposedDiamondCutTimestamp == 0) {
             return false;

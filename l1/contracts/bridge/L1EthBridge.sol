@@ -1,8 +1,6 @@
-pragma solidity ^0.8.0;
-
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-
+pragma solidity ^0.8.0;
 
 import "./interfaces/IL1Bridge.sol";
 import "./interfaces/IL2Bridge.sol";
@@ -48,7 +46,6 @@ contract L1EthBridge is IL1Bridge, ReentrancyGuard {
             IContractDeployer.create2.selector,
             create2Salt,
             l2BridgeBytecodeHash,
-            0,
             create2Input
         );
 
@@ -115,6 +112,7 @@ contract L1EthBridge is IL1Bridge, ReentrancyGuard {
         bytes32 _l2TxHash,
         uint256 _l2BlockNumber,
         uint256 _l2MessageIndex,
+        uint16 _l2TxNumberInBlock,
         bytes32[] calldata _merkleProof
     ) external override nonReentrant {
         require(_l1Token == CONVENTIONAL_ETH_ADDRESS);
@@ -123,7 +121,14 @@ contract L1EthBridge is IL1Bridge, ReentrancyGuard {
         uint256 amount = depositAmount[_depositSender][_l2TxHash];
         require(amount != 0);
 
-        L2Log memory l2Log = L2Log({sender: BOOTLOADER_ADDRESS, key: _l2TxHash, value: bytes32(0)});
+        L2Log memory l2Log = L2Log({
+            l2ShardId: 0,
+            isService: true,
+            txNumberInBlock: _l2TxNumberInBlock,
+            sender: BOOTLOADER_ADDRESS,
+            key: _l2TxHash,
+            value: bytes32(0)
+        });
         bool success = zkSyncMailbox.proveL2LogInclusion(_l2BlockNumber, _l2MessageIndex, l2Log, _merkleProof);
         require(success);
 
@@ -138,12 +143,17 @@ contract L1EthBridge is IL1Bridge, ReentrancyGuard {
     function finalizeWithdrawal(
         uint256 _l2BlockNumber,
         uint256 _l2MessageIndex,
+        uint16 _l2TxNumberInBlock,
         bytes calldata _message,
         bytes32[] calldata _merkleProof
     ) external override nonReentrant {
         require(!isWithdrawalFinalized[_l2BlockNumber][_l2MessageIndex]);
 
-        L2Message memory l2ToL1Message = L2Message({sender: l2Bridge, data: _message});
+        L2Message memory l2ToL1Message = L2Message({
+            txNumberInBlock: _l2TxNumberInBlock,
+            sender: l2Bridge,
+            data: _message
+        });
 
         (address l1Receiver, uint256 amount) = _parseL2WithdrawalMessage(_message);
 

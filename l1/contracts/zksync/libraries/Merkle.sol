@@ -1,8 +1,6 @@
-pragma solidity ^0.8.0;
-
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-
+pragma solidity ^0.8.0;
 
 /// @author Matter Labs
 library Merkle {
@@ -22,9 +20,9 @@ library Merkle {
         bytes32 currentHash = _itemHash;
         for (uint256 i = 0; i < pathLength; ) {
             if (_index % 2 == 0) {
-                currentHash = sha256(abi.encodePacked(currentHash, _path[i]));
+                currentHash = keccak256(abi.encodePacked(currentHash, _path[i]));
             } else {
-                currentHash = sha256(abi.encodePacked(_path[i], currentHash));
+                currentHash = keccak256(abi.encodePacked(_path[i], currentHash));
             }
             _index /= 2;
 

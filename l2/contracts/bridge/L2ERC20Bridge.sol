@@ -27,12 +27,17 @@ contract L2ERC20Bridge is IL2Bridge {
     /// @dev mapping l2 token address => l1 token address
     mapping(address => address) public override l1TokenAddress;
 
-    constructor(address _l1Bridge, bytes32 _l2TokenProxyBytecodeHash) {
+    constructor(
+        address _l1Bridge,
+        bytes32 _l2TokenProxyBytecodeHash,
+        address _governor
+    ) {
         l1Bridge = _l1Bridge;
 
         l2TokenProxyBytecodeHash = _l2TokenProxyBytecodeHash;
         address l2StandardToken = address(new L2StandardERC20{salt: bytes32(0)}());
         l2TokenFactory = new UpgradeableBeacon{salt: bytes32(0)}(l2StandardToken);
+        l2TokenFactory.transferOwnership(_governor);
     }
 
     function finalizeDeposit(

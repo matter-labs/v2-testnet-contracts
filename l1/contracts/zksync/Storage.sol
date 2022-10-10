@@ -1,12 +1,18 @@
-pragma solidity ^0.8.0;
-
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-
+pragma solidity ^0.8.0;
 
 import "./Verifier.sol";
 import "./libraries/PriorityQueue.sol";
 
+/// @dev Logically separated part of the storage structure, which is responsible for everything related to proxy upgrades and diamond cuts
+/// @param proposedDiamondCutHash The hash of diamond cut that was proposed in the current upgrade
+/// @param proposedDiamondCutTimestamp The timestamp when the diamond cut was proposed, zero if there are no active proposals
+/// @param lastDiamondFreezeTimestamp The timestamp when the diamond was frozen last time, zero if the diamond was never frozen
+/// @param currentProposalId The serial number of proposed diamond cuts, increments when proposing a new diamond cut
+/// @param securityCouncilMembers The set of the trusted addresses that can instantly finish upgrade (diamond cut)
+/// @param securityCouncilMemberLastApprovedProposalId The mapping of the security council addresses and the last diamond cut that they approved
+/// @param securityCouncilEmergencyApprovals The number of received upgrade approvals from the security council
 struct DiamondCutStorage {
     bytes32 proposedDiamondCutHash;
     uint256 proposedDiamondCutTimestamp;
@@ -17,18 +23,31 @@ struct DiamondCutStorage {
     uint256 securityCouncilEmergencyApprovals;
 }
 
-/// @dev log passed from L2
+/// @dev The log passed from L2
+/// @param l2ShardId The shard identifier, 0 - rollup, 1 - porter. All other values are not used but are reserved for the future
+/// @param isService A boolean flag that is part of the log along with `key`, `value`, and `sender` address.
+/// This field is required formally but does not have any special meaning.
+/// @param txNumberInBlock The L2 transaction number in a block, in which the log was sent
+/// @param sender The L2 address which sent the log
+/// @param key The 32 bytes of information that was sent in the log
+/// @param value The 32 bytes of information that was sent in the log
+// Both `key` and `value` are arbitrary 32-bytes selected by the log sender
 struct L2Log {
+    uint8 l2ShardId;
+    bool isService;
+    uint16 txNumberInBlock;
     address sender;
     bytes32 key;
     bytes32 value;
 }
 
-/// @dev arbitrary length message passed from L2
-/// @notice under the hood it is `L2Log` sent from the special system L2 contract
-/// @param sender address of the L2 account from which the message was passed
-/// @param data arbitrary length message
+/// @dev An arbitrary length message passed from L2
+/// @notice Under the hood it is `L2Log` sent from the special system L2 contract
+/// @param txNumberInBlock The L2 transaction number in a block, in which the message was sent
+/// @param sender The address of the L2 account from which the message was passed
+/// @param data An arbitrary length message
 struct L2Message {
+    uint16 txNumberInBlock;
     address sender;
     bytes data;
 }
@@ -60,4 +79,13 @@ struct AppStorage {
     mapping(uint256 => bytes32) l2LogsRootHashes;
     /// @dev Container that stores transactions requested from L1
     PriorityQueue.Queue priorityQueue;
+    /// @notice Bytecode hash of bootloader program.
+    /// @dev Used as an input to zkp-circuit.
+    bytes32 l2BootloaderBytecodeHash;
+    /// @notice Bytecode hash of default account (bytecode for EOA).
+    /// @dev Used as an input to zkp-circuit.
+    bytes32 l2DefaultAccountBytecodeHash;
+    /// @dev Indicates that the porter may be touched on L2 transactions.
+    /// @dev Used as an input to zkp-circuit.
+    bool zkPorterIsAvailable;
 }

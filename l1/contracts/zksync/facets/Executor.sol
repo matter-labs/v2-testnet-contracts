@@ -1,14 +1,13 @@
-pragma solidity ^0.8.0;
-
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-
+pragma solidity ^0.8.0;
 
 import "./Base.sol";
 import "../Config.sol";
 import "../interfaces/IExecutor.sol";
 import "../libraries/PriorityQueue.sol";
 import "../../common/libraries/UnsafeBytes.sol";
+import "../../common/L2ContractHelper.sol";
 
 /// @title zkSync Executor contract capable of processing events emitted in the zkSync protocol.
 /// @author Matter Labs
@@ -29,28 +28,48 @@ contract ExecutorFacet is Base, IExecutor {
         // Get the chained hash of priority transaction hashes.
         (bytes32 priorityOperationsHash, bytes32 previousBlockHash, uint256 blockTimestamp) = _processL2Logs(_newBlock);
 
-        // Check the timestamp of the new block
+        require(_previousBlock.blockHash == previousBlockHash, "l");
+
+        // Preventing "stack too deep error"
         {
+            // Check the timestamp of the new block
             bool timestampNotTooSmall = block.timestamp - COMMIT_TIMESTAMP_NOT_OLDER <= blockTimestamp;
             bool timestampNotTooBig = blockTimestamp <= block.timestamp + COMMIT_TIMESTAMP_APPROXIMATION_DELTA;
             require(timestampNotTooSmall && timestampNotTooBig, "h"); // New block timestamp is not valid
+
+            // Check the index of repeated storage writes
+            uint256 newStorageChangesIndexes = uint256(uint32(bytes4(_newBlock.initialStorageChanges[:4])));
+            require(
+                _previousBlock.indexRepeatedStorageChanges + newStorageChangesIndexes ==
+                    _newBlock.indexRepeatedStorageChanges,
+                "yq"
+            );
         }
 
-        // TODO: Restore after block commitment will be integrated
-        // require(_previousBlock.blockHash == previousBlockHash, "l");
+        bytes32 blockHash = _calculateBlockHash(_previousBlock, _newBlock);
 
         // Create block commitment for the proof verification
-        bytes32 commitment = _createBlockCommitment(_previousBlock, _newBlock);
+        bytes32 commitment = _createBlockCommitment(_newBlock, blockHash);
 
         return
             StoredBlockInfo(
                 _newBlock.blockNumber,
+                blockHash,
+                _newBlock.indexRepeatedStorageChanges,
                 _newBlock.numberOfLayer1Txs,
                 priorityOperationsHash,
                 _newBlock.l2LogsTreeRoot,
-                _newBlock.newStateRoot,
+                _newBlock.timestamp,
                 commitment
             );
+    }
+
+    function _calculateBlockHash(StoredBlockInfo memory _previousBlock, CommitBlockInfo calldata _newBlock)
+        internal
+        pure
+        returns (bytes32)
+    {
+        return keccak256(abi.encode(_previousBlock.blockHash, _newBlock.newStateRoot));
     }
 
     /// @dev Check that L2 logs are proper and block contain all meta information for them
@@ -63,37 +82,46 @@ contract ExecutorFacet is Base, IExecutor {
             uint256 blockTimestamp
         )
     {
-        bytes memory l2Logs = _newBlock.l2Logs;
-        bytes[] calldata L2Messages = _newBlock.l2ArbitraryLengthMessages;
+        // Copy L2 to L1 logs into memory.
+        bytes memory emmitedL2Logs = _newBlock.l2Logs[4:];
+        bytes[] calldata l2Messages = _newBlock.l2ArbitraryLengthMessages;
         uint256 currentMessage;
+        bytes[] calldata factoryDeps = _newBlock.factoryDeps;
+        uint256 currentBytecode;
 
         chainedPriorityTxsHash = EMPTY_STRING_KECCAK;
 
-        require(l2Logs.length % L2_LOG_BYTES == 0, "k1");
-
         // linear traversal of the logs
-        for (uint256 i = 0; i < l2Logs.length; ) {
-            (address logSender, ) = UnsafeBytes.readAddress(l2Logs, i);
+        uint256 emmitedL2LogsLen = emmitedL2Logs.length;
+        for (uint256 i = 0; i < emmitedL2LogsLen; ) {
+            (address logSender, ) = UnsafeBytes.readAddress(emmitedL2Logs, i + 4);
 
             // show preimage for hashed message stored in log
             if (logSender == L2_TO_L1_MESSENGER) {
-                (bytes32 hashedMessage, ) = UnsafeBytes.readBytes32(l2Logs, i + 52);
-                require(keccak256(L2Messages[currentMessage]) == hashedMessage, "k2");
+                (bytes32 hashedMessage, ) = UnsafeBytes.readBytes32(emmitedL2Logs, i + 56);
+                require(keccak256(l2Messages[currentMessage]) == hashedMessage, "k2");
 
                 unchecked {
                     ++currentMessage;
                 }
             } else if (logSender == L2_BOOTLOADER_ADDRESS) {
-                (bytes32 canonicalTxHash, ) = UnsafeBytes.readBytes32(l2Logs, i + 20);
+                (bytes32 canonicalTxHash, ) = UnsafeBytes.readBytes32(emmitedL2Logs, i + 24);
                 chainedPriorityTxsHash = keccak256(bytes.concat(chainedPriorityTxsHash, canonicalTxHash));
             } else if (logSender == L2_SYSTEM_CONTEXT_ADDRESS) {
-                (blockTimestamp, ) = UnsafeBytes.readUint256(l2Logs, i + 20);
-                (previousBlockHash, ) = UnsafeBytes.readBytes32(l2Logs, i + 52);
+                (blockTimestamp, ) = UnsafeBytes.readUint256(emmitedL2Logs, i + 24);
+                (previousBlockHash, ) = UnsafeBytes.readBytes32(emmitedL2Logs, i + 56);
+            } else if (logSender == L2_KNOWN_CODE_STORAGE_ADDRESS) {
+                (bytes32 bytecodeHash, ) = UnsafeBytes.readBytes32(emmitedL2Logs, i + 24);
+                require(bytecodeHash == L2ContractHelper.hashL2Bytecode(factoryDeps[currentBytecode]), "k3");
+
+                unchecked {
+                    ++currentBytecode;
+                }
             }
 
             // move the pointer to the next log
             unchecked {
-                i += L2_LOG_BYTES;
+                i += L2_TO_L1_LOG_SERIALIZE_SIZE;
             }
         }
     }
@@ -112,22 +140,30 @@ contract ExecutorFacet is Base, IExecutor {
         require(s.storedBlockHashes[s.totalBlocksCommitted] == _hashStoredBlockInfo(_lastCommittedBlockData), "i"); // incorrect previous block data
 
         uint256 blocksLength = _newBlocksData.length;
-        for (uint256 i = 0; i < blocksLength; ++i) {
+        for (uint256 i = 0; i < blocksLength; ) {
             _lastCommittedBlockData = _commitOneBlock(_lastCommittedBlockData, _newBlocksData[i]);
             s.storedBlockHashes[_lastCommittedBlockData.blockNumber] = _hashStoredBlockInfo(_lastCommittedBlockData);
             emit BlockCommit(_lastCommittedBlockData.blockNumber);
+
+            unchecked {
+                ++i;
+            }
         }
 
         s.totalBlocksCommitted = s.totalBlocksCommitted + blocksLength;
     }
 
     /// @dev Pops the priority operations from the priority queue and returns a rolling hash of operations
-    function _collectOperationsFromPriorityQueue(uint16 _nPriorityOps) internal returns (bytes32 concatHash) {
+    function _collectOperationsFromPriorityQueue(uint256 _nPriorityOps) internal returns (bytes32 concatHash) {
         concatHash = EMPTY_STRING_KECCAK;
 
-        for (uint256 i = 0; i < _nPriorityOps; ++i) {
+        for (uint256 i = 0; i < _nPriorityOps; ) {
             PriorityOperation memory priorityOp = s.priorityQueue.popFront();
             concatHash = keccak256(abi.encodePacked(concatHash, priorityOp.canonicalTxHash));
+
+            unchecked {
+                ++i;
+            }
         }
     }
 
@@ -155,9 +191,13 @@ contract ExecutorFacet is Base, IExecutor {
     /// @notice 2. Finalizes block on Ethereum
     function executeBlocks(StoredBlockInfo[] calldata _blocksData) external nonReentrant onlyValidator {
         uint256 nBlocks = _blocksData.length;
-        for (uint256 i = 0; i < nBlocks; ++i) {
+        for (uint256 i = 0; i < nBlocks; ) {
             _executeOneBlock(_blocksData[i], i);
             emit BlockExecution(_blocksData[i].blockNumber);
+
+            unchecked {
+                ++i;
+            }
         }
 
         s.totalBlocksExecuted = s.totalBlocksExecuted + nBlocks;
@@ -218,7 +258,7 @@ contract ExecutorFacet is Base, IExecutor {
             s.totalBlocksVerified = s.totalBlocksCommitted;
         }
 
-        emit BlocksRevert(s.totalBlocksExecuted, s.totalBlocksCommitted);
+        emit BlocksRevert(s.totalBlocksCommitted, s.totalBlocksVerified, s.totalBlocksExecuted);
     }
 
     /// @notice Returns larger of two values
@@ -227,48 +267,74 @@ contract ExecutorFacet is Base, IExecutor {
     }
 
     /// @dev Creates block commitment from its data
-    function _createBlockCommitment(StoredBlockInfo memory _previousBlock, CommitBlockInfo calldata _newBlockData)
+    function _createBlockCommitment(CommitBlockInfo calldata _newBlockData, bytes32 _blockHash)
         internal
         view
         returns (bytes32)
     {
-        bytes32 hash = sha256(abi.encodePacked(uint256(_newBlockData.blockNumber), _newBlockData.feeAccount));
-        hash = sha256(abi.encodePacked(hash, _previousBlock.stateRoot));
-        hash = sha256(abi.encodePacked(hash, _newBlockData.newStateRoot));
-        hash = sha256(abi.encodePacked(hash, _newBlockData.l2LogsTreeRoot));
-        // Number of operations requested from Layer 1 should NOT be included in the commitment
-        // because the `priorityOperationsHash` is already commited to the priority operations
-        hash = sha256(abi.encodePacked(hash, uint256(_newBlockData.numberOfLayer2Txs)));
+        bytes32 passThroughDataHash = keccak256(_blockPassThroughData(_newBlockData, _blockHash));
+        bytes32 metadataHash = keccak256(_blockMetaParameters(_newBlockData));
+        bytes32 auxiliaryOutputHash = keccak256(_blockAuxilaryOutput(_newBlockData));
 
-        hash = _concatHash(hash, _newBlockData.l2Logs);
-        hash = _concatHash(hash, _newBlockData.storageChanges);
-
-        return hash;
+        return keccak256(abi.encode(passThroughDataHash, metadataHash, auxiliaryOutputHash));
     }
 
-    function _concatHash(bytes32 _hash, bytes memory _bytes) internal view returns (bytes32 concatHash) {
-        // The code below is equivalent to `concatHash = sha256(abi.encodePacked(_hash, _bytes))`
-        // We use inline assembly instead of this concise and readable code in order to avoid copying of `_bytes`.
+    function _blockPassThroughData(CommitBlockInfo calldata _block, bytes32 _blockHash)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return
+            abi.encodePacked(
+                _block.indexRepeatedStorageChanges,
+                _blockHash,
+                uint64(0), // index repeated storage changes in zkPorter
+                bytes32(0) // zkPorter block hash
+            );
+    }
 
-        // Specifically, we perform the following trick:
-        // First, replace the first 32 bytes of `_bytes` (where normally its length is stored) with the value of `_hash`.
-        // Then, we call `sha256` precompile passing the `_bytes` pointer and the length of the concatenated byte buffer.
-        // Finally, we put the `_bytes.length` back to its original location (to the first word of `_bytes`).
+    function _blockMetaParameters(CommitBlockInfo calldata _block) internal view returns (bytes memory) {
+        return
+            abi.encodePacked(
+                _block.ergsPerCodeDecommittmentWord,
+                s.zkPorterIsAvailable,
+                s.l2BootloaderBytecodeHash,
+                s.l2DefaultAccountBytecodeHash
+            );
+    }
+
+    function _blockAuxilaryOutput(CommitBlockInfo calldata _block) internal pure returns (bytes memory) {
+        bytes32 initialStorageChangesHash = _hashPaddedData(
+            _block.initialStorageChanges,
+            INITIAL_STORAGE_CHANGES_COMMITMENT_BYTES
+        );
+        bytes32 repeatedStorageChangesHash = _hashPaddedData(
+            _block.repeatedStorageChanges,
+            REPEATED_STORAGE_CHANGES_COMMITMENT_BYTES
+        );
+        bytes32 l2ToL1LogsHash = _hashPaddedData(_block.l2Logs, L2_TO_L1_LOGS_COMMITMENT_BYTES);
+
+        return abi.encode(_block.l2LogsTreeRoot, l2ToL1LogsHash, initialStorageChangesHash, repeatedStorageChangesHash);
+    }
+
+    function _hashPaddedData(bytes calldata _data, uint256 _paddedLength) internal pure returns (bytes32 result) {
+        uint256 actualLength = _data.length;
+        require(_paddedLength >= actualLength, "gy");
+
         assembly {
-            let hashResult := mload(0x40)
-            let bytesLen := mload(_bytes)
-            mstore(_bytes, _hash)
-            // staticcall to the sha256 precompile at address 0x2
-            let success := staticcall(gas(), 0x2, _bytes, add(bytesLen, 0x20), hashResult, 0x20)
-            mstore(_bytes, bytesLen)
+            // The pointer to the free memory slot.
+            let ptr := mload(0x40)
+            // Copy payload data from "calldata" to "memory".
+            calldatacopy(ptr, _data.offset, actualLength)
+            // Pad it with zeros on the right side.
+            // Copy calldata in memory that go beyond the calldata size, according to the Appendix H in the
+            // Ethereum Yellow paper (https://ethereum.github.io/yellowpaper/paper.pdf) zero bytes will be copied into memory.
+            calldatacopy(add(ptr, actualLength), calldatasize(), sub(_paddedLength, actualLength))
 
-            // Use "invalid" to make gas estimation work
-            switch success
-            case 0 {
-                invalid()
-            }
+            // We don't change the free memory pointer, since the data we store is only needed to calculate a hash.
+            // It doesn't break current solidity (<= 0.8.x) invariants.
 
-            concatHash := mload(hashResult)
+            result := keccak256(ptr, _paddedLength)
         }
     }
 

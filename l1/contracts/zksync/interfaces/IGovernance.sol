@@ -1,8 +1,6 @@
-pragma solidity ^0.8;
-
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-
+pragma solidity ^0.8;
 
 interface IGovernance {
     function setPendingGovernor(address _newPendingGovernor) external;
@@ -10,6 +8,21 @@ interface IGovernance {
     function acceptGovernor() external;
 
     function setValidator(address _validator, bool _active) external;
+
+    function setL2BootloaderBytecodeHash(bytes32 _l2BootloaderBytecodeHash) external;
+
+    function setL2DefaultAccountBytecodeHash(bytes32 _l2DefaultAccountBytecodeHash) external;
+
+    function setPorterAvailability(bool _isPorterAvailable) external;
+
+    /// @notice Сhanges to the bytecode that is used in L2 as a bootloader (start program)
+    event NewL2BootloaderBytecodeHash(bytes32 indexed previousBytecodeHash, bytes32 indexed newBytecodeHash);
+
+    /// @notice Сhanges to the bytecode that is used in L2 as a default account
+    event NewL2DefaultAccountBytecodeHash(bytes32 indexed previousBytecodeHash, bytes32 indexed newBytecodeHash);
+
+    /// @notice Porter availability status changes
+    event IsPorterAvailableStatusUpdate(bool isPorterAvailable);
 
     /// @notice Validator's status changed
     event ValidatorStatusUpdate(address indexed validatorAddress, bool isActive);
