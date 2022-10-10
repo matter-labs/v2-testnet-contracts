@@ -10,7 +10,6 @@ import "./interfaces/IImmutableSimulator.sol";
 import "./interfaces/IEthToken.sol";
 import "./interfaces/IL1Messenger.sol";
 import "./interfaces/ISystemContext.sol";
-import "./BootloaderUtilities.sol";
 
 uint160 constant SYSTEM_CONTRACTS_OFFSET = 0x8000; // 2^15
 uint160 constant MAX_SYSTEM_CONTRACT_ADDRESS = 0xffff; // 2^16 - 1
@@ -36,8 +35,6 @@ IEthToken constant ETH_TOKEN_SYSTEM_CONTRACT = IEthToken(address(SYSTEM_CONTRACT
 address constant KECCAK256_SYSTEM_CONTRACT = address(SYSTEM_CONTRACTS_OFFSET + 0x10);
 
 ISystemContext constant SYSTEM_CONTEXT_CONTRACT = ISystemContext(payable(address(SYSTEM_CONTRACTS_OFFSET + 0x0b)));
-
-BootloaderUtilities constant BOOTLOADER_UTILITIES = BootloaderUtilities(address(SYSTEM_CONTRACTS_OFFSET + 0x0c));
 
 bytes32 constant DEFAULT_ACCOUNT_CODE_HASH = 0x00;
 
