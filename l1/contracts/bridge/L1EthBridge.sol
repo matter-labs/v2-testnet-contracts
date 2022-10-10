@@ -5,12 +5,17 @@ pragma solidity ^0.8.0;
 import "./interfaces/IL1Bridge.sol";
 import "./interfaces/IL2Bridge.sol";
 
+import "../common/interfaces/IAllowList.sol";
+import "../common/AllowListed.sol";
 import "../common/libraries/UnsafeBytes.sol";
 import "../common/L2ContractHelper.sol";
 import "../common/ReentrancyGuard.sol";
 
 /// @author Matter Labs
-contract L1EthBridge is IL1Bridge, ReentrancyGuard {
+contract L1EthBridge is IL1Bridge, AllowListed, ReentrancyGuard {
+    /// @dev The smart contract that manages the list with permission to call contract functions
+    IAllowList immutable allowList;
+
     /// @dev zkSync smart contract used to interact with L2 via asynchronous L2 <-> L1 communication
     IMailbox immutable zkSyncMailbox;
 
@@ -31,8 +36,9 @@ contract L1EthBridge is IL1Bridge, ReentrancyGuard {
 
     /// @dev Contract is expected to be used as proxy implementation.
     /// @dev Initialize the implementation to prevent Parity hack.
-    constructor(IMailbox _mailbox) reentrancyGuardInitializer {
+    constructor(IMailbox _mailbox, IAllowList _allowList) reentrancyGuardInitializer {
         zkSyncMailbox = _mailbox;
+        allowList = _allowList;
     }
 
     /// @dev Initializes a contract bridge for later use. Expected to be used in the proxy.
@@ -70,7 +76,7 @@ contract L1EthBridge is IL1Bridge, ReentrancyGuard {
         address _l2Receiver,
         address _l1Token,
         uint256 _amount
-    ) external payable nonReentrant returns (bytes32 txHash) {
+    ) external payable nonReentrant senderCanCallFunction(allowList) returns (bytes32 txHash) {
         require(_l1Token == CONVENTIONAL_ETH_ADDRESS);
 
         // Will revert if msg.value is less than the amount of the deposit
@@ -114,7 +120,7 @@ contract L1EthBridge is IL1Bridge, ReentrancyGuard {
         uint256 _l2MessageIndex,
         uint16 _l2TxNumberInBlock,
         bytes32[] calldata _merkleProof
-    ) external override nonReentrant {
+    ) external override nonReentrant senderCanCallFunction(allowList) {
         require(_l1Token == CONVENTIONAL_ETH_ADDRESS);
 
         // Checks
@@ -146,7 +152,7 @@ contract L1EthBridge is IL1Bridge, ReentrancyGuard {
         uint16 _l2TxNumberInBlock,
         bytes calldata _message,
         bytes32[] calldata _merkleProof
-    ) external override nonReentrant {
+    ) external override nonReentrant senderCanCallFunction(allowList) {
         require(!isWithdrawalFinalized[_l2BlockNumber][_l2MessageIndex]);
 
         L2Message memory l2ToL1Message = L2Message({

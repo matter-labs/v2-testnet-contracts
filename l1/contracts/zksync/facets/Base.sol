@@ -4,10 +4,11 @@ pragma solidity ^0.8.0;
 
 import "../Storage.sol";
 import "../../common/ReentrancyGuard.sol";
+import "../../common/AllowListed.sol";
 
 /// @title Base contract containing functions accessible to the other facets.
 /// @author Matter Labs
-contract Base is ReentrancyGuard {
+contract Base is ReentrancyGuard, AllowListed {
     AppStorage internal s;
 
     /// @notice Checks that the message sender is an active governor

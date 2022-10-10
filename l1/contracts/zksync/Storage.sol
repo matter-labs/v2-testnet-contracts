@@ -3,6 +3,7 @@
 pragma solidity ^0.8.0;
 
 import "./Verifier.sol";
+import "../common/interfaces/IAllowList.sol";
 import "./libraries/PriorityQueue.sol";
 
 /// @dev Logically separated part of the storage structure, which is responsible for everything related to proxy upgrades and diamond cuts
@@ -86,6 +87,8 @@ struct AppStorage {
     mapping(uint256 => bytes32) l2LogsRootHashes;
     /// @dev Container that stores transactions requested from L1
     PriorityQueue.Queue priorityQueue;
+    /// @dev The smart contract that manages the list with permission to call contract functions
+    IAllowList allowList;
     /// @notice Part of the configuration parameters of ZKP circuits. Used as an input for the verifier smart contract
     VerifierParams verifierParams;
     /// @notice Bytecode hash of bootloader program.

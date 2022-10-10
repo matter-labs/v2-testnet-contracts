@@ -5,13 +5,18 @@ pragma solidity ^0.8.0;
 import "./interfaces/IL1Bridge.sol";
 import "./interfaces/IL2Bridge.sol";
 
+import "../common/interfaces/IAllowList.sol";
+import "../common/AllowListed.sol";
 import "../common/interfaces/IERC20.sol";
 import "../common/libraries/UnsafeBytes.sol";
 import "../common/ReentrancyGuard.sol";
 import "../common/L2ContractHelper.sol";
 
 /// @author Matter Labs
-contract L1ERC20Bridge is IL1Bridge, ReentrancyGuard {
+contract L1ERC20Bridge is IL1Bridge, AllowListed, ReentrancyGuard {
+    /// @dev The smart contract that manages the list with permission to call contract functions
+    IAllowList immutable allowList;
+
     /// @dev zkSync smart contract that used to operate with L2 via asynchronous L2 <-> L1 communication
     IMailbox immutable zkSyncMailbox;
 
@@ -40,8 +45,9 @@ contract L1ERC20Bridge is IL1Bridge, ReentrancyGuard {
 
     /// @dev Contract is expected to be used as proxy implementation.
     /// @dev Initialize the implementation to prevent Parity hack.
-    constructor(IMailbox _mailbox) reentrancyGuardInitializer {
+    constructor(IMailbox _mailbox, IAllowList _allowList) reentrancyGuardInitializer {
         zkSyncMailbox = _mailbox;
+        allowList = _allowList;
     }
 
     /// @dev Initializes a contract bridge for later use. Expected to be used in the proxy.
@@ -92,7 +98,7 @@ contract L1ERC20Bridge is IL1Bridge, ReentrancyGuard {
         address _l2Receiver,
         address _l1Token,
         uint256 _amount
-    ) external payable nonReentrant returns (bytes32 txHash) {
+    ) external payable nonReentrant senderCanCallFunction(allowList) returns (bytes32 txHash) {
         uint256 amount = _depositFunds(msg.sender, IERC20(_l1Token), _amount);
         require(amount > 0, "1T"); // empty deposit amount
 
@@ -158,7 +164,7 @@ contract L1ERC20Bridge is IL1Bridge, ReentrancyGuard {
         uint256 _l2MessageIndex,
         uint16 _l2TxNumberInBlock,
         bytes32[] calldata _merkleProof
-    ) external nonReentrant {
+    ) external nonReentrant senderCanCallFunction(allowList) {
         L2Log memory l2Log = L2Log({
             l2ShardId: 0,
             isService: true,
@@ -185,7 +191,7 @@ contract L1ERC20Bridge is IL1Bridge, ReentrancyGuard {
         uint16 _l2TxNumberInBlock,
         bytes calldata _message,
         bytes32[] calldata _merkleProof
-    ) external nonReentrant {
+    ) external nonReentrant senderCanCallFunction(allowList) {
         require(!isWithdrawalFinalized[_l2BlockNumber][_l2MessageIndex], "pw");
 
         L2Message memory l2ToL1Message = L2Message({
@@ -195,13 +201,16 @@ contract L1ERC20Bridge is IL1Bridge, ReentrancyGuard {
         });
 
         (address l1Receiver, address l1Token, uint256 amount) = _parseL2WithdrawalMessage(l2ToL1Message.data);
-        bool success = zkSyncMailbox.proveL2MessageInclusion(
-            _l2BlockNumber,
-            _l2MessageIndex,
-            l2ToL1Message,
-            _merkleProof
-        );
-        require(success, "nq");
+        // Preventing the stack too deep error
+        {
+            bool success = zkSyncMailbox.proveL2MessageInclusion(
+                _l2BlockNumber,
+                _l2MessageIndex,
+                l2ToL1Message,
+                _merkleProof
+            );
+            require(success, "nq");
+        }
 
         isWithdrawalFinalized[_l2BlockNumber][_l2MessageIndex] = true;
         _withdrawFunds(l1Receiver, IERC20(l1Token), amount);

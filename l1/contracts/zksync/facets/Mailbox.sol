@@ -98,7 +98,7 @@ contract MailboxFacet is Base, IMailbox {
         bytes calldata _calldata,
         uint256 _ergsLimit,
         bytes[] calldata _factoryDeps
-    ) external payable nonReentrant returns (bytes32 canonicalTxHash) {
+    ) external payable nonReentrant senderCanCallFunction(s.allowList) returns (bytes32 canonicalTxHash) {
         return _requestL2Transaction(msg.sender, _contractL2, _l2Value, _calldata, _ergsLimit, _factoryDeps);
     }
 

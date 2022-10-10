@@ -2,6 +2,7 @@
 
 pragma solidity ^0.8.0;
 
+import "../common/interfaces/IAllowList.sol";
 import "./interfaces/IExecutor.sol";
 import "./libraries/Diamond.sol";
 import "./facets/Base.sol";
@@ -23,6 +24,7 @@ contract DiamondInit is Base {
         address _validator,
         bytes32 _genesisBlockHash,
         uint64 _genesisIndexRepeatedStorageChanges,
+        IAllowList _allowList,
         VerifierParams calldata _verifierParams,
         bool _zkPorterIsAvailable,
         bytes32 _l2BootloaderBytecodeHash,
@@ -45,6 +47,7 @@ contract DiamondInit is Base {
         );
 
         s.storedBlockHashes[0] = keccak256(abi.encode(storedBlockZero));
+        s.allowList = _allowList;
         s.verifierParams = _verifierParams;
         s.zkPorterIsAvailable = _zkPorterIsAvailable;
         s.l2BootloaderBytecodeHash = _l2BootloaderBytecodeHash;
