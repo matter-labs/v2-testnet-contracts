@@ -40,32 +40,24 @@ uint256 constant BLOCK_PERIOD = 13 seconds;
 uint256 constant PRIORITY_EXPIRATION_PERIOD = 3 days;
 
 /// @dev Expiration delta for priority request to be satisfied (in ETH blocks)
-uint256 constant PRIORITY_EXPIRATION = $(
-    defined(PRIORITY_EXPIRATION) ? PRIORITY_EXPIRATION : PRIORITY_EXPIRATION_PERIOD / BLOCK_PERIOD
-);
+uint256 constant PRIORITY_EXPIRATION = 0;
 
 /// @dev Notice period before activation preparation status of upgrade mode (in seconds)
 /// @dev NOTE: we must reserve for users enough time to send full exit operation, wait maximum time for processing this operation and withdraw funds from it.
-uint256 constant UPGRADE_NOTICE_PERIOD = $$(defined(UPGRADE_NOTICE_PERIOD) ? UPGRADE_NOTICE_PERIOD : "14 days");
+uint256 constant UPGRADE_NOTICE_PERIOD = 14 days;
 
 /// @dev Timestamp - seconds since unix epoch
-uint256 constant COMMIT_TIMESTAMP_NOT_OLDER = $$(
-    defined(COMMIT_TIMESTAMP_NOT_OLDER) ? COMMIT_TIMESTAMP_NOT_OLDER : "365 days"
-);
+uint256 constant COMMIT_TIMESTAMP_NOT_OLDER = 365 days;
 
 /// @dev Maximum available error between real commit block timestamp and analog used in the verifier (in seconds)
 /// @dev Must be used cause miner's `block.timestamp` value can differ on some small value (as we know - 15 seconds)
-uint256 constant COMMIT_TIMESTAMP_APPROXIMATION_DELTA = $$(
-    defined(COMMIT_TIMESTAMP_APPROXIMATION_DELTA) ? COMMIT_TIMESTAMP_APPROXIMATION_DELTA : "365 days"
-);
+uint256 constant COMMIT_TIMESTAMP_APPROXIMATION_DELTA = 365 days;
 
 /// @dev Bit mask to apply for verifier public input before verifying.
-uint256 constant INPUT_MASK = $$(~uint256(0) >> 3);
+uint256 constant INPUT_MASK = (~uint256(0) >> 3);
 
 /// @dev The maximum number of ergs that a user can request for L1 -> L2 transactions
 uint256 constant PRIORITY_TX_MAX_ERGS_LIMIT = 2097152;
 
 /// @dev Number of security council members that should approve an emergency upgrade
-uint256 constant SECURITY_COUNCIL_APPROVALS_FOR_EMERGENCY_UPGRADE = $$(
-    SECURITY_COUNCIL_APPROVALS_FOR_EMERGENCY_UPGRADE
-);
+uint256 constant SECURITY_COUNCIL_APPROVALS_FOR_EMERGENCY_UPGRADE = 0;
