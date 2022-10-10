@@ -3,6 +3,7 @@
 pragma solidity ^0.8.0;
 
 import './Constants.sol';
+import './SystemContractHelper.sol';
 import './TransactionHelper.sol';
 
 import './interfaces/IAccount.sol';
@@ -36,36 +37,67 @@ contract DefaultAccount is IAccount {
 		_;
 	}
 
-	function validateTransaction(Transaction calldata _transaction) external payable override ignoreNonBootloader {
-		_validateTransaction(_transaction);
+	function validateTransaction(
+		bytes32, // _txHash 
+		bytes32 _suggestedSignedHash, 
+		Transaction calldata _transaction
+	) external payable override ignoreNonBootloader {
+		_validateTransaction(_suggestedSignedHash, _transaction);
 	}
 
-	function _validateTransaction(Transaction calldata _transaction) internal {
-		NONCE_HOLDER_SYSTEM_CONTRACT.incrementNonceIfEquals(_transaction.reserved[0]);
-		bytes32 txHash = _transaction.encodeHash();
+	function _validateTransaction(bytes32 _suggestedSignedHash, Transaction calldata _transaction) internal {
+		SystemContractsCaller.systemCall(
+			uint32(gasleft()),
+			address(NONCE_HOLDER_SYSTEM_CONTRACT),
+			0,
+			abi.encodeCall(INonceHolder.incrementMinNonceIfEquals, (_transaction.reserved[0]))
+		);
+		
+		bytes32 txHash;
+
+		if(_suggestedSignedHash == bytes32(0)) {
+			txHash = _transaction.encodeHash();
+		} else {
+			txHash = _suggestedSignedHash;
+		}
 
 		require(_isValidSignature(txHash, _transaction.signature) == EIP1271_SUCCESS_RETURN_VALUE, "Invalid signature");
 	}
 
-	function executeTransaction(Transaction calldata _transaction) external payable override ignoreNonBootloader {
+	function executeTransaction(
+		bytes32, // _txHash
+		bytes32, // _suggestedSignedHash 
+		Transaction calldata _transaction
+	) external payable override ignoreNonBootloader {
 		_execute(_transaction);
 	}
 
 	function executeTransactionFromOutside(Transaction calldata _transaction) external payable override ignoreNonBootloader {
-		_validateTransaction(_transaction);
+		// The account recalculate the hash on its own
+		_validateTransaction(bytes32(0), _transaction);
 		_execute(_transaction);
 	}
 
 	function _execute(Transaction calldata _transaction) internal {
-		uint256 to = _transaction.to;
+		address to = address(uint160(_transaction.to));
 		uint256 value = _transaction.reserved[1];
 		bytes memory data = _transaction.data;
 
-		bool success;
-		assembly {
-			success := call(gas(), to, value, add(data, 0x20), mload(data), 0, 0)
+		if(to == address(DEPLOYER_SYSTEM_CONTRACT)) {
+			// We allow calling ContractDeployer with any calldata
+			SystemContractsCaller.systemCall(
+				uint32(gasleft()),
+				to,
+				uint128(_transaction.reserved[1]), // By convention, reserved[1] is `value`
+				_transaction.data
+			);
+		} else {
+			bool success;
+			assembly {
+				success := call(gas(), to, value, add(data, 0x20), mload(data), 0, 0)
+			}
+			require(success);
 		}
-		require(success);
 	}
 
 	function _isValidSignature(bytes32 _hash, bytes memory _signature) internal view returns (bytes4) {
@@ -93,14 +125,22 @@ contract DefaultAccount is IAccount {
 	}
 
 	// Here, the user pays the bootloader for the transaction
-	function payForTransaction(Transaction calldata _transaction) external payable ignoreNonBootloader {
+	function payForTransaction(
+		bytes32, // _txHash
+		bytes32, // _suggestedSignedHash
+		Transaction calldata _transaction
+	) external payable ignoreNonBootloader {
 		bool success = _transaction.payToTheBootloader();
 		require(success, "Failed to pay the fee to the operator");
 	}
 
 	// Here, the user should prepare for the transaction to be paid for by a paymaster
 	// Here, the account should set the allowance for the smart contracts
-	function prePaymaster(Transaction calldata _transaction) external payable ignoreNonBootloader {
+	function prePaymaster(
+		bytes32, // _txHash
+		bytes32, // _suggestedSignedHash
+		Transaction calldata _transaction
+	) external payable ignoreNonBootloader {
 		_transaction.processPaymasterInput();
 	}
  

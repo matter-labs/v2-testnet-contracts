@@ -9,9 +9,10 @@ import "./interfaces/IKnownCodesStorage.sol";
 import "./interfaces/IImmutableSimulator.sol";
 import "./interfaces/IEthToken.sol";
 import "./interfaces/IL1Messenger.sol";
-import "./SystemContext.sol";
+import "./interfaces/ISystemContext.sol";
 
 uint160 constant SYSTEM_CONTRACTS_OFFSET = 0x8000; // 2^15
+uint160 constant MAX_SYSTEM_CONTRACT_ADDRESS = 0xffff; // 2^16 - 1
 
 address constant ECRECOVER_SYSTEM_CONTRACT = address(0x01);
 address constant SHA256_SYSTEM_CONTRACT = address(0x02);
@@ -33,12 +34,12 @@ IEthToken constant ETH_TOKEN_SYSTEM_CONTRACT = IEthToken(address(SYSTEM_CONTRACT
 
 address constant KECCAK256_SYSTEM_CONTRACT = address(SYSTEM_CONTRACTS_OFFSET + 0x10);
 
-SystemContext constant SYSTEM_CONTEXT_CONTRACT = SystemContext(address(SYSTEM_CONTRACTS_OFFSET + 0x0b));
-
-uint256 constant MAX_SYSTEM_CONTRACT_ADDRESS = 0xffff;
+ISystemContext constant SYSTEM_CONTEXT_CONTRACT = ISystemContext(payable(address(SYSTEM_CONTRACTS_OFFSET + 0x0b)));
 
 bytes32 constant DEFAULT_ACCOUNT_CODE_HASH = 0x00;
 
 // The number of bytes that are published during the contract deployment
 // in addition to the bytecode itself.
 uint256 constant BYTECODE_PUBLISHING_OVERHEAD = 100;
+
+uint256 constant MSG_VALUE_SIMULATOR_IS_SYSTEM_BIT = 2**128;

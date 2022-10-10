@@ -11,7 +11,7 @@ interface IContractDeployer {
         bytes32 _salt,
         bytes calldata _input
     ) external pure returns (address newAddress);
-
+ 
     function getNewAddressCreate(
         address _sender,
         uint256 _senderNonce
@@ -20,16 +20,14 @@ interface IContractDeployer {
     function create2 (
         bytes32 _salt,
         bytes32 _bytecodeHash,
-        uint256 _value,
         bytes calldata _input
-    ) external returns (address newAddress, bytes memory constructorRevertData);
+    ) external payable returns (address newAddress, bytes memory constructorRevertData);
 
     function create2Account (
         bytes32 _salt,
         bytes32 _bytecodeHash,
-        uint256 _value,
         bytes calldata _input
-    ) external returns (address newAddress, bytes memory constructorRevertData);
+    ) external payable returns (address newAddress, bytes memory constructorRevertData);
 
     /// @dev While the `_salt` parameter is not used anywhere here, 
     /// it is still needed for consistency between `create` and
@@ -37,16 +35,14 @@ interface IContractDeployer {
     function create (
         bytes32 _salt,
         bytes32 _bytecodeHash,
-        uint256 _value,
         bytes calldata _input
-    ) external returns (address newAddress, bytes memory constructorRevertData);
+    ) external payable returns (address newAddress, bytes memory constructorRevertData);
 
     /// @dev While `_salt` is never used here, we leave it here as a parameter
     /// for the consistency with the `create` function.
     function createAccount (
         bytes32 _salt,
         bytes32 _bytecodeHash,
-        uint256 _value,
         bytes calldata _input
-    ) external returns (address newAddress, bytes memory constructorRevertData);
+    ) external payable returns (address newAddress, bytes memory constructorRevertData);
 }

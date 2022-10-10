@@ -91,7 +91,7 @@ library TransactionHelper {
 			)
 		);
 
-		bytes32 domainSeparator = keccak256(abi.encode(EIP712_DOMAIN_TYPEHASH, keccak256('zkSync'), keccak256('2'), _getChainId()));
+		bytes32 domainSeparator = keccak256(abi.encode(EIP712_DOMAIN_TYPEHASH, keccak256('zkSync'), keccak256('2'), block.chainid));
 
 		return keccak256(abi.encodePacked('\x19\x01', domainSeparator, structHash));
 	}
@@ -135,7 +135,7 @@ library TransactionHelper {
 		// Encode `chainId` according to EIP-155, but only if the `chainId` is specified in the transaction.
 		bytes memory encodedChainId;
 		if (_transaction.reserved[2] != 0) {
-			encodedChainId = bytes.concat(RLPEncoder.encodeUint256(_getChainId()), hex'80_80');
+			encodedChainId = bytes.concat(RLPEncoder.encodeUint256(block.chainid), hex'80_80');
 		}
 
 		bytes memory encodedListLength;
@@ -175,7 +175,7 @@ library TransactionHelper {
         // Encode all fixed-length params to avoid "stack too deep error"
         bytes memory encodedFixedLengthParams;
         {
-            bytes memory encodedChainId = RLPEncoder.encodeUint256(_getChainId());
+            bytes memory encodedChainId = RLPEncoder.encodeUint256(block.chainid);
             bytes memory encodedNonce = RLPEncoder.encodeUint256(_transaction.reserved[0]);
             bytes memory encodedMaxPriorityFeePerGas = RLPEncoder.encodeUint256(_transaction.maxPriorityFeePerErg);
             bytes memory encodedMaxFeePerGas = RLPEncoder.encodeUint256(_transaction.maxFeePerErg);
@@ -234,10 +234,6 @@ library TransactionHelper {
                 )
             );
     }
-
-	function _getChainId() internal view returns(uint256 chainId) { 
-		chainId = SYSTEM_CONTEXT_CONTRACT.chainId();
-	}
 
 	function processPaymasterInput(Transaction calldata _transaction) internal {
 		require(_transaction.paymasterInput.length >= 4, "The standard paymaster input must be at least 4 bytes long");

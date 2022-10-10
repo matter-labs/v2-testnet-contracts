@@ -10,7 +10,6 @@ interface IContractDeployer {
     function create2(
         bytes32 _salt,
         bytes32 _bytecodeHash,
-        uint256 _value,
         bytes calldata _input
     ) external;
 }

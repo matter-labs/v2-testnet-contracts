@@ -1,10 +1,9 @@
-pragma solidity ^0.8.0;
-
 // SPDX-License-Identifier: MIT
 
-
+pragma solidity ^0.8.0;
 
 import "../interfaces/IGovernance.sol";
+import "../../common/L2ContractHelper.sol";
 import "./Base.sol";
 
 /// @title Governance Contract controls access rights for contract management.
@@ -46,6 +45,46 @@ contract GovernanceFacet is Base, IGovernance {
         if (s.validators[_validator] != _active) {
             s.validators[_validator] = _active;
             emit ValidatorStatusUpdate(_validator, _active);
+        }
+    }
+
+    /// @notice Change bootloader bytecode hash, that is used on L2
+    /// @param _l2BootloaderBytecodeHash The hash of bootloader L2 bytecode
+    function setL2BootloaderBytecodeHash(bytes32 _l2BootloaderBytecodeHash) external onlyGovernor {
+        L2ContractHelper.validateBytecodeHash(_l2BootloaderBytecodeHash);
+
+        // Save previous value into the stack to put it into the event later
+        bytes32 previousBootloaderBytecodeHash = s.l2BootloaderBytecodeHash;
+
+        if (previousBootloaderBytecodeHash != _l2BootloaderBytecodeHash) {
+            // Change the bootloader bytecode hash
+            s.l2BootloaderBytecodeHash = _l2BootloaderBytecodeHash;
+            emit NewL2BootloaderBytecodeHash(previousBootloaderBytecodeHash, _l2BootloaderBytecodeHash);
+        }
+    }
+
+    /// @notice Change default account bytecode hash, that is used on L2
+    /// @param _l2DefaultAccountBytecodeHash The hash of default account L2 bytecode
+    function setL2DefaultAccountBytecodeHash(bytes32 _l2DefaultAccountBytecodeHash) external onlyGovernor {
+        L2ContractHelper.validateBytecodeHash(_l2DefaultAccountBytecodeHash);
+
+        // Save previous value into the stack to put it into the event later
+        bytes32 previousDefaultAccountBytecodeHash = s.l2DefaultAccountBytecodeHash;
+
+        if (previousDefaultAccountBytecodeHash != _l2DefaultAccountBytecodeHash) {
+            // Change the default account bytecode hash
+            s.l2DefaultAccountBytecodeHash = _l2DefaultAccountBytecodeHash;
+            emit NewL2DefaultAccountBytecodeHash(previousDefaultAccountBytecodeHash, _l2DefaultAccountBytecodeHash);
+        }
+    }
+
+    /// @notice Change zk porter availability
+    /// @param _zkPorterIsAvailable The availability of zk porter shard
+    function setPorterAvailability(bool _zkPorterIsAvailable) external onlyGovernor {
+        if (s.zkPorterIsAvailable != _zkPorterIsAvailable) {
+            // Change the porter availability
+            s.zkPorterIsAvailable = _zkPorterIsAvailable;
+            emit IsPorterAvailableStatusUpdate(_zkPorterIsAvailable);
         }
     }
 }

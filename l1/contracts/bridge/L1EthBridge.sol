@@ -1,18 +1,21 @@
-pragma solidity ^0.8.0;
-
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-
+pragma solidity ^0.8.0;
 
 import "./interfaces/IL1Bridge.sol";
 import "./interfaces/IL2Bridge.sol";
 
+import "../common/interfaces/IAllowList.sol";
+import "../common/AllowListed.sol";
 import "../common/libraries/UnsafeBytes.sol";
 import "../common/L2ContractHelper.sol";
 import "../common/ReentrancyGuard.sol";
 
 /// @author Matter Labs
-contract L1EthBridge is IL1Bridge, ReentrancyGuard {
+contract L1EthBridge is IL1Bridge, AllowListed, ReentrancyGuard {
+    /// @dev The smart contract that manages the list with permission to call contract functions
+    IAllowList immutable allowList;
+
     /// @dev zkSync smart contract used to interact with L2 via asynchronous L2 <-> L1 communication
     IMailbox immutable zkSyncMailbox;
 
@@ -33,8 +36,9 @@ contract L1EthBridge is IL1Bridge, ReentrancyGuard {
 
     /// @dev Contract is expected to be used as proxy implementation.
     /// @dev Initialize the implementation to prevent Parity hack.
-    constructor(IMailbox _mailbox) reentrancyGuardInitializer {
+    constructor(IMailbox _mailbox, IAllowList _allowList) reentrancyGuardInitializer {
         zkSyncMailbox = _mailbox;
+        allowList = _allowList;
     }
 
     /// @dev Initializes a contract bridge for later use. Expected to be used in the proxy.
@@ -48,7 +52,6 @@ contract L1EthBridge is IL1Bridge, ReentrancyGuard {
             IContractDeployer.create2.selector,
             create2Salt,
             l2BridgeBytecodeHash,
-            0,
             create2Input
         );
 
@@ -73,7 +76,7 @@ contract L1EthBridge is IL1Bridge, ReentrancyGuard {
         address _l2Receiver,
         address _l1Token,
         uint256 _amount
-    ) external payable nonReentrant returns (bytes32 txHash) {
+    ) external payable nonReentrant senderCanCallFunction(allowList) returns (bytes32 txHash) {
         require(_l1Token == CONVENTIONAL_ETH_ADDRESS);
 
         // Will revert if msg.value is less than the amount of the deposit
@@ -115,15 +118,23 @@ contract L1EthBridge is IL1Bridge, ReentrancyGuard {
         bytes32 _l2TxHash,
         uint256 _l2BlockNumber,
         uint256 _l2MessageIndex,
+        uint16 _l2TxNumberInBlock,
         bytes32[] calldata _merkleProof
-    ) external override nonReentrant {
+    ) external override nonReentrant senderCanCallFunction(allowList) {
         require(_l1Token == CONVENTIONAL_ETH_ADDRESS);
 
         // Checks
         uint256 amount = depositAmount[_depositSender][_l2TxHash];
         require(amount != 0);
 
-        L2Log memory l2Log = L2Log({sender: BOOTLOADER_ADDRESS, key: _l2TxHash, value: bytes32(0)});
+        L2Log memory l2Log = L2Log({
+            l2ShardId: 0,
+            isService: true,
+            txNumberInBlock: _l2TxNumberInBlock,
+            sender: BOOTLOADER_ADDRESS,
+            key: _l2TxHash,
+            value: bytes32(0)
+        });
         bool success = zkSyncMailbox.proveL2LogInclusion(_l2BlockNumber, _l2MessageIndex, l2Log, _merkleProof);
         require(success);
 
@@ -138,12 +149,17 @@ contract L1EthBridge is IL1Bridge, ReentrancyGuard {
     function finalizeWithdrawal(
         uint256 _l2BlockNumber,
         uint256 _l2MessageIndex,
+        uint16 _l2TxNumberInBlock,
         bytes calldata _message,
         bytes32[] calldata _merkleProof
-    ) external override nonReentrant {
+    ) external override nonReentrant senderCanCallFunction(allowList) {
         require(!isWithdrawalFinalized[_l2BlockNumber][_l2MessageIndex]);
 
-        L2Message memory l2ToL1Message = L2Message({sender: l2Bridge, data: _message});
+        L2Message memory l2ToL1Message = L2Message({
+            txNumberInBlock: _l2TxNumberInBlock,
+            sender: l2Bridge,
+            data: _message
+        });
 
         (address l1Receiver, uint256 amount) = _parseL2WithdrawalMessage(_message);
 

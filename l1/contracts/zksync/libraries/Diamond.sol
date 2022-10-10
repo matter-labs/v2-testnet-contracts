@@ -1,10 +1,9 @@
-pragma solidity ^0.8.0;
-
 // SPDX-License-Identifier: MIT
 
-
+pragma solidity ^0.8.0;
 
 /// @author Matter Labs
+/// @notice The helper library for managing the EIP-2535 diamond proxy.
 library Diamond {
     /// @dev Magic value that should be returned by diamond cut initialize contracts.
     /// @dev Used to distinguish calls to contracts that were supposed to be used as diamond initializer from other contracts.
@@ -31,6 +30,12 @@ library Diamond {
         uint16 facetPosition;
     }
 
+    /// @notice The structure that holds all diamond proxy associated parameters
+    /// @dev According to the EIP-2535 should be stored on a special storage key - `DIAMOND_STORAGE_POSITION`
+    /// @param selectorToFacet An mapping from selector to the facet address and its' meta information
+    /// @param facetToSelectors An mapping from facet address to its' selector with meta information
+    /// @param facets The array of all unique facet addresses that belong to the diamond proxy
+    /// @param isFrozen Denotes whether the diamond proxy is frozen and all freezable facets are not accessible
     struct DiamondStorage {
         mapping(bytes4 => SelectorToFacet) selectorToFacet;
         mapping(address => FacetToSelectors) facetToSelectors;
@@ -38,6 +43,7 @@ library Diamond {
         bool isFrozen;
     }
 
+    /// @return diamondStorage The pointer to the storage where all specific diamond proxy parameters stored
     function getDiamondStorage() internal pure returns (DiamondStorage storage diamondStorage) {
         bytes32 position = DIAMOND_STORAGE_POSITION;
         assembly {
@@ -45,12 +51,18 @@ library Diamond {
         }
     }
 
+    /// @notice Action on selectors for one facet on a Diamond Cut
     enum Action {
         Add,
         Replace,
         Remove
     }
 
+    /// @dev Parameters for diamond changes that touch one of the facets
+    /// @param facet The address of facet that's affected by the cut
+    /// @param action The action that is made on the facet
+    /// @param isFreezable Denotes whether the facet & all their selectors can be frozen
+    /// @param selectors An array of unique selectors that belongs to the facet address
     struct FacetCut {
         address facet;
         Action action;
@@ -58,12 +70,18 @@ library Diamond {
         bytes4[] selectors;
     }
 
+    /// @dev Structure of the diamond proxy changes
+    /// @param facetCuts The set of changes (adding/removing/replacement) of implementation contracts
+    /// @param initAddress The address that's dellegate called after setting up new facet changes
+    /// @param initCalldata Calldata for the delegete call to `initAddress`
     struct DiamondCutData {
         FacetCut[] facetCuts;
         address initAddress;
         bytes initCalldata;
     }
 
+    /// @dev Add/replace/remove any number of selectors and optionally execute a function with delegatecall
+    /// @param _diamondCut Diamond's facet changes and the parameters to optional initialization delegatecall
     function diamondCut(DiamondCutData memory _diamondCut) internal {
         FacetCut[] memory facetCuts = _diamondCut.facetCuts;
         address initAddress = _diamondCut.initAddress;
@@ -240,6 +258,8 @@ library Diamond {
         ds.facets.pop();
     }
 
+    /// @dev Delegates call to the initialization address with provided calldata
+    /// @dev Used as a final step of diamond cut to execute the logic of the initialization for changed facets
     function _initializeDiamondCut(address _init, bytes memory _calldata) private {
         if (_init == address(0)) {
             require(_calldata.length == 0, "H"); // Non-empty calldata for zero address

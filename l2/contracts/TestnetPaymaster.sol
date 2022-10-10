@@ -10,12 +10,11 @@ import "./L2ContractHelper.sol";
 // This is a dummy paymaster. It expects the paymasterInput to contain its "signature" as well as the needed exchange rate.
 // It supports only approval-based paymaster flow.
 contract TestnetPaymaster is IPaymaster {
-    function validateAndPayForPaymasterTransaction(Transaction calldata _transaction)
-        external
-        payable
-        override
-        returns (bytes memory context)
-    {
+    function validateAndPayForPaymasterTransaction(
+        bytes32,
+        bytes32,
+        Transaction calldata _transaction
+    ) external payable returns (bytes memory context) {
         require(msg.sender == BOOTLOADER_ADDRESS, "Only bootloader can call this contract");
         require(_transaction.paymasterInput.length >= 4, "The standard paymaster input must be at least 4 bytes long");
 
@@ -49,6 +48,8 @@ contract TestnetPaymaster is IPaymaster {
     function postOp(
         bytes calldata _context,
         Transaction calldata _transaction,
+        bytes32,
+        bytes32,
         ExecutionResult _txResult,
         uint256 _maxRefundedErgs
     ) external payable override {

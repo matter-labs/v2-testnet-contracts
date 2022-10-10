@@ -1,8 +1,6 @@
-pragma solidity ^0.8.0;
-
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-
+pragma solidity ^0.8.0;
 
 import {IMailbox, L2Log, L2Message} from "../../zksync/interfaces/IZkSync.sol";
 
@@ -28,12 +26,14 @@ interface IL1Bridge {
         bytes32 _l2TxHash,
         uint256 _l2BlockNumber,
         uint256 _l2MessageIndex,
+        uint16 _l2TxNumberInBlock,
         bytes32[] calldata _merkleProof
     ) external;
 
     function finalizeWithdrawal(
         uint256 _l2BlockNumber,
         uint256 _l2MessageIndex,
+        uint16 _l2TxNumberInBlock,
         bytes calldata _message,
         bytes32[] calldata _merkleProof
     ) external;

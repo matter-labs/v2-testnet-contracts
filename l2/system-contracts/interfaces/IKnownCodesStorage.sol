@@ -2,15 +2,10 @@
 
 pragma solidity ^0.8.0;
 
-uint256 constant MAX_KNOWN_CODE_HASHES = 16;
 interface IKnownCodesStorage {
-    function markAsKnownCandidates(bytes32[MAX_KNOWN_CODE_HASHES] calldata _hash) external;
+    event MarkedAsKnown(bytes32 indexed bytecodeHash, bool indexed sendBytecodeToL1);
 
-    function markAsRepublished(bytes32 _hash) external;
-
-    function removeUnusedKnownCandidate(bytes32 _hash) external;
-
-    function checkIfKnown(bytes32 _hash) external view returns (bool);
+    function markFactoryDeps(bool _shouldSendToL1, bytes32[] calldata _hashes) external;
 
     function getMarker(bytes32 _hash) external view returns (uint256);
 }
