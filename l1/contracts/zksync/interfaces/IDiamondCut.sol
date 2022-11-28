@@ -1,6 +1,8 @@
+pragma solidity ^0.8;
+
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-pragma solidity ^0.8;
+
 
 import "../libraries/Diamond.sol";
 
@@ -21,13 +23,18 @@ interface IDiamondCut {
 
     event DiamondCutProposal(Diamond.FacetCut[] _facetCuts, address _initAddress);
 
-    event DiamondCutProposalCancelation();
+    event DiamondCutProposalCancelation(uint256 currentProposalId, bytes32 indexed proposedDiamondCutHash);
 
     event DiamondCutProposalExecution(Diamond.DiamondCutData _diamondCut);
 
     event EmergencyFreeze();
 
-    event Unfreeze();
+    event Unfreeze(uint256 lastDiamondFreezeTimestamp);
 
-    event EmergencyDiamondCutApproved(address _address);
+    event EmergencyDiamondCutApproved(
+        address indexed _address,
+        uint256 currentProposalId,
+        uint256 securityCouncilEmergencyApprovals,
+        bytes32 indexed proposedDiamondCutHash
+    );
 }

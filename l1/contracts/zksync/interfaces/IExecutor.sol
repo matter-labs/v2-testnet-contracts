@@ -1,6 +1,8 @@
+pragma solidity ^0.8;
+
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-pragma solidity ^0.8;
+
 
 interface IExecutor {
     /// @notice Rollup block stored data
@@ -11,7 +13,6 @@ interface IExecutor {
     /// @param priorityOperationsHash Hash of all priority operations from this block
     /// @param l2LogsTreeRoot Root hash of tree that contains L2 -> L1 messages from this block
     /// @param timestamp Rollup block timestamp, have the same format as Ethereum block constant
-    /// @param stateRoot Merkle root of the rollup state tree
     /// @param commitment Verified input for the zkSync circuit
     struct StoredBlockInfo {
         uint64 blockNumber;
@@ -30,7 +31,6 @@ interface IExecutor {
     /// @param indexRepeatedStorageChanges The serial number of the shortcut index that's used as a unique identifier for storage keys that were used twice or more
     /// @param newStateRoot The state root of the full state tree
     /// @param ergsPerPubdataByteInBlock Price in ergs per one byte of published pubdata in block
-    /// @param ergsPerCodeDecommittmentWord Price in ergs per decommittment of one machine word from l2 bytecode
     /// @param numberOfLayer1Txs Number of priority operations to be processed
     /// @param l2LogsTreeRoot The root hash of the tree that contains all L2 -> L1 logs in the block
     /// @param priorityOperationsHash Hash of all priority operations from this block
@@ -44,7 +44,6 @@ interface IExecutor {
         uint64 timestamp;
         uint64 indexRepeatedStorageChanges;
         bytes32 newStateRoot;
-        uint16 ergsPerCodeDecommittmentWord;
         uint256 numberOfLayer1Txs;
         bytes32 l2LogsTreeRoot;
         bytes32 priorityOperationsHash;
@@ -62,24 +61,42 @@ interface IExecutor {
         uint256[] serializedProof;
     }
 
+    /// @notice Specifies whether to verify Zero Knowledge Proof for the block or just ignore the proof
+    /// @dev This is a temporary measure for the first release, a validator can skip block verification
+    /// if they failed to create the proof or faced any infrastructure issues
+    /// @param Ignore The provided proof does NOT need to be verified
+    /// @param Verify The provided proof does need to be verified
+    enum BlockVerificationMode {
+        Ignore,
+        Verify
+    }
+
     function commitBlocks(StoredBlockInfo calldata _lastCommittedBlockData, CommitBlockInfo[] calldata _newBlocksData)
         external;
 
     function proveBlocks(
         StoredBlockInfo calldata _prevBlock,
         StoredBlockInfo[] calldata _committedBlocks,
-        ProofInput calldata _proof
+        ProofInput calldata _proof,
+        BlockVerificationMode _verificationMode
     ) external;
 
     function executeBlocks(StoredBlockInfo[] calldata _blocksData) external;
 
-    function revertBlocks(uint256 _blocksToRevert) external;
+    function revertBlocks(uint256 _newLastBlock) external;
 
     /// @notice Event emitted when a block is committed
-    event BlockCommit(uint256 indexed blockNumber);
+    event BlockCommit(uint256 indexed blockNumber, bytes32 indexed blockHash, bytes32 indexed commitment);
+
+    /// @notice Event emitted when blocks are verified
+    event BlocksVerification(
+        uint256 indexed previousLastVerifiedBlock,
+        uint256 indexed currentLastVerifiedBlock,
+        BlockVerificationMode verificationMode
+    );
 
     /// @notice Event emitted when a block is executed
-    event BlockExecution(uint256 indexed blockNumber);
+    event BlockExecution(uint256 indexed blockNumber, bytes32 indexed blockHash, bytes32 indexed commitment);
 
     /// @notice Event emitted when blocks are reverted
     event BlocksRevert(uint256 totalBlocksCommitted, uint256 totalBlocksVerified, uint256 totalBlocksExecuted);

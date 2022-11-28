@@ -1,6 +1,8 @@
+pragma solidity ^0.8.0;
+
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-pragma solidity ^0.8.0;
+
 
 library UncheckedMath {
     function uncheckedInc(uint256 _number) internal pure returns (uint256) {

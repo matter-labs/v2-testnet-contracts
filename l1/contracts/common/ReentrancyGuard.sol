@@ -1,6 +1,8 @@
+pragma solidity ^0.8.0;
+
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-pragma solidity ^0.8.0;
+
 
 /**
  * @dev Contract module that helps prevent reentrant calls to a function.
@@ -69,7 +71,7 @@ abstract contract ReentrancyGuard {
         }
 
         // On the first call to nonReentrant, _notEntered will be true
-        require(_status == _NOT_ENTERED);
+        require(_status == _NOT_ENTERED, "r1");
 
         // Any calls to nonReentrant after this point will fail
         assembly {

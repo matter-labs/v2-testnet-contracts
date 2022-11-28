@@ -1,6 +1,8 @@
+pragma solidity ^0.8.0;
+
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-pragma solidity ^0.8.0;
+
 
 import "./interfaces/IAllowList.sol";
 import "./libraries/UncheckedMath.sol";
@@ -29,8 +31,9 @@ contract AllowList is IAllowList {
     /// @dev caller => target => function signature => permission to call target function for the given caller address
     mapping(address => mapping(address => mapping(bytes4 => bool))) public hasSpecialAccessToCall;
 
-    constructor() {
-        owner = msg.sender;
+    constructor(address _owner) {
+        require(_owner != address(0), "kq");
+        owner = _owner;
     }
 
     modifier onlyOwner() {

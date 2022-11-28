@@ -1,6 +1,8 @@
+pragma solidity ^0.8.0;
+
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-pragma solidity ^0.8.0;
+
 
 import "./libraries/PairingsBn254.sol";
 import "./libraries/TranscriptLib.sol";
@@ -14,7 +16,7 @@ struct VerificationKey {
     uint256 num_inputs;
     PairingsBn254.Fr omega;
     PairingsBn254.G1Point[2] gate_selectors_commitments;
-    PairingsBn254.G1Point[7] gate_setup_commitments;
+    PairingsBn254.G1Point[8] gate_setup_commitments;
     PairingsBn254.G1Point[STATE_WIDTH] permutation_commitments;
     PairingsBn254.G1Point lookup_selector_commitment;
     PairingsBn254.G1Point[4] lookup_tables_commitments;
@@ -423,10 +425,15 @@ contract Plonk4VerifierWithAccessToDNext {
         t.mul_assign(proof.state_polys_openings_at_z[1]);
         scaled = vk.gate_setup_commitments[4].point_mul(t);
         result.point_add_assign(scaled);
+        // Q_AC* A*C
+        t = proof.state_polys_openings_at_z[0].copy();
+        t.mul_assign(proof.state_polys_openings_at_z[2]);
+        scaled = vk.gate_setup_commitments[5].point_mul(t);
+        result.point_add_assign(scaled);
         // Q_const
-        result.point_add_assign(vk.gate_setup_commitments[5]);
+        result.point_add_assign(vk.gate_setup_commitments[6]);
         // Q_dNext * D_next
-        scaled = vk.gate_setup_commitments[6].point_mul(proof.state_polys_openings_at_z_omega[0]);
+        scaled = vk.gate_setup_commitments[7].point_mul(proof.state_polys_openings_at_z_omega[0]);
         result.point_add_assign(scaled);
         result.point_mul_assign(proof.gate_selectors_openings_at_z[0]);
 

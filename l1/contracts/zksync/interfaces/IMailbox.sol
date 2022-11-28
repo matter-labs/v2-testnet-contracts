@@ -1,6 +1,8 @@
+pragma solidity ^0.8;
+
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-pragma solidity ^0.8;
+
 
 import {L2Log, L2Message} from "../Storage.sol";
 import "../../common/interfaces/IERC20.sol";
@@ -74,12 +76,12 @@ interface IMailbox {
     ) external pure returns (L2CanonicalTransaction memory);
 
     function requestL2Transaction(
-        address _contractAddressL2,
+        address _contractL2,
         uint256 _l2Value,
         bytes calldata _calldata,
         uint256 _ergsLimit,
         bytes[] calldata _factoryDeps
-    ) external payable returns (bytes32 txHash);
+    ) external payable returns (bytes32 canonicalTxHash);
 
     function l2TransactionBaseCost(
         uint256 _gasPrice,

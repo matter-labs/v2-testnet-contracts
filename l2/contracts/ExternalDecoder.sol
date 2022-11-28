@@ -1,6 +1,8 @@
+pragma solidity ^0.8.0;
+
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-pragma solidity ^0.8.0;
+
 
 /// @author Matter Labs
 /// @dev The library with which it is possible to use `abi.decode` with error handling.

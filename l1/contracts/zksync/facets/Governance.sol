@@ -1,6 +1,8 @@
+pragma solidity ^0.8.0;
+
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.0;
+
 
 import "../interfaces/IGovernance.sol";
 import "../../common/L2ContractHelper.sol";
@@ -30,11 +32,12 @@ contract GovernanceFacet is Base, IGovernance {
         require(msg.sender == pendingGovernor, "n4"); // Only proposed by current governor address can claim the governor rights
 
         if (pendingGovernor != s.governor) {
+            address previousGovernor = s.governor;
             s.governor = pendingGovernor;
-            s.pendingGovernor = address(0);
+            delete s.pendingGovernor;
 
             emit NewPendingGovernor(pendingGovernor, address(0));
-            emit NewGovernor(pendingGovernor);
+            emit NewGovernor(previousGovernor, pendingGovernor);
         }
     }
 
@@ -86,5 +89,24 @@ contract GovernanceFacet is Base, IGovernance {
             s.zkPorterIsAvailable = _zkPorterIsAvailable;
             emit IsPorterAvailableStatusUpdate(_zkPorterIsAvailable);
         }
+    }
+
+    /// @notice Change the address of the verifier smart contract
+    /// @param _newVerifier Verifier smart contract address
+    function setVerifier(Verifier _newVerifier) external onlyGovernor {
+        Verifier oldVerifier = s.verifier;
+        if (oldVerifier != _newVerifier) {
+            s.verifier = _newVerifier;
+            emit NewVerifier(address(oldVerifier), address(_newVerifier));
+        }
+    }
+
+    /// @notice Change the verifier parameters
+    /// @param _newVerifierParams New parameters for the verifier
+    function setVerifierParams(VerifierParams calldata _newVerifierParams) external onlyGovernor {
+        VerifierParams memory oldVerifierParams = s.verifierParams;
+
+        s.verifierParams = _newVerifierParams;
+        emit NewVerifierParams(oldVerifierParams, _newVerifierParams);
     }
 }

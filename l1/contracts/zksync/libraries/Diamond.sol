@@ -1,16 +1,21 @@
+pragma solidity ^0.8.0;
+
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.0;
+
 
 /// @author Matter Labs
 /// @notice The helper library for managing the EIP-2535 diamond proxy.
 library Diamond {
     /// @dev Magic value that should be returned by diamond cut initialize contracts.
     /// @dev Used to distinguish calls to contracts that were supposed to be used as diamond initializer from other contracts.
-    bytes32 constant DIAMOND_INIT_SUCCESS_RETURN_VALUE = keccak256("diamond.zksync.init");
+    bytes32 constant DIAMOND_INIT_SUCCESS_RETURN_VALUE =
+        0x33774e659306e47509050e97cb651e731180a42d458212294d30751925c551a2; // keccak256("diamond.zksync.init") - 1
 
     /// @dev Storage position of `DiamondStorage` structure.
-    bytes32 constant DIAMOND_STORAGE_POSITION = keccak256("diamond.standard.diamond.storage");
+    bytes32 constant DIAMOND_STORAGE_POSITION = 0xc8fcad8db84d3cc18b4c41d551ea0ee66dd599cde068d998e57d5e09332c131b; // keccak256("diamond.standard.diamond.storage") - 1;
+
+    event DiamondCut(FacetCut[] facetCuts, address initAddress, bytes initCalldata);
 
     /// @dev Utility struct that contains associated facet & meta information of selector
     /// @param facetAddress address of the facet which is connected with selector
@@ -32,8 +37,8 @@ library Diamond {
 
     /// @notice The structure that holds all diamond proxy associated parameters
     /// @dev According to the EIP-2535 should be stored on a special storage key - `DIAMOND_STORAGE_POSITION`
-    /// @param selectorToFacet An mapping from selector to the facet address and its' meta information
-    /// @param facetToSelectors An mapping from facet address to its' selector with meta information
+    /// @param selectorToFacet A mapping from the selector to the facet address and its meta information
+    /// @param facetToSelectors A mapping from facet address to its selector with meta information
     /// @param facets The array of all unique facet addresses that belong to the diamond proxy
     /// @param isFrozen Denotes whether the diamond proxy is frozen and all freezable facets are not accessible
     struct DiamondStorage {
@@ -41,21 +46,6 @@ library Diamond {
         mapping(address => FacetToSelectors) facetToSelectors;
         address[] facets;
         bool isFrozen;
-    }
-
-    /// @return diamondStorage The pointer to the storage where all specific diamond proxy parameters stored
-    function getDiamondStorage() internal pure returns (DiamondStorage storage diamondStorage) {
-        bytes32 position = DIAMOND_STORAGE_POSITION;
-        assembly {
-            diamondStorage.slot := position
-        }
-    }
-
-    /// @notice Action on selectors for one facet on a Diamond Cut
-    enum Action {
-        Add,
-        Replace,
-        Remove
     }
 
     /// @dev Parameters for diamond changes that touch one of the facets
@@ -82,11 +72,28 @@ library Diamond {
 
     /// @dev Add/replace/remove any number of selectors and optionally execute a function with delegatecall
     /// @param _diamondCut Diamond's facet changes and the parameters to optional initialization delegatecall
+    enum Action {
+        Add,
+        Replace,
+        Remove
+    }
+
+    /// @return diamondStorage The pointer to the storage where all specific diamond proxy parameters stored
+    function getDiamondStorage() internal pure returns (DiamondStorage storage diamondStorage) {
+        bytes32 position = DIAMOND_STORAGE_POSITION;
+        assembly {
+            diamondStorage.slot := position
+        }
+    }
+
+    /// @dev Add/replace/remove any number of selectors and optionally execute a function with delegatecall
+    /// @param _diamondCut Diamond's facet changes and the parameters to optional initialization delegatecall
     function diamondCut(DiamondCutData memory _diamondCut) internal {
         FacetCut[] memory facetCuts = _diamondCut.facetCuts;
         address initAddress = _diamondCut.initAddress;
         bytes memory initCalldata = _diamondCut.initCalldata;
-        for (uint256 i = 0; i < facetCuts.length; ++i) {
+        uint256 facetCutsLength = facetCuts.length;
+        for (uint256 i = 0; i < facetCutsLength; ++i) {
             Action action = facetCuts[i].action;
             address facet = facetCuts[i].facet;
             bool isFacetFreezable = facetCuts[i].isFreezable;
@@ -109,8 +116,6 @@ library Diamond {
         emit DiamondCut(facetCuts, initAddress, initCalldata);
     }
 
-    event DiamondCut(FacetCut[] facetCuts, address initAddress, bytes initCalldata);
-
     /// @dev Add new functions to the diamond proxy
     /// NOTE: expect but NOT enforce that `_selectors` is NON-EMPTY array
     function _addFunctions(
@@ -125,7 +130,8 @@ library Diamond {
         // Add facet to the list of facets if the facet address is new one
         _saveFacetIfNew(_facet);
 
-        for (uint256 i = 0; i < _selectors.length; ++i) {
+        uint256 selectorsLength = _selectors.length;
+        for (uint256 i = 0; i < selectorsLength; ++i) {
             bytes4 selector = _selectors[i];
             SelectorToFacet memory oldFacet = ds.selectorToFacet[selector];
             require(oldFacet.facetAddress == address(0), "J"); // facet for this selector already exists
@@ -145,15 +151,15 @@ library Diamond {
 
         require(_facet != address(0), "K"); // cannot replace facet with zero address
 
-        // Add facet to the list of facets if the facet address is a new one
-        _saveFacetIfNew(_facet);
-
-        for (uint256 i = 0; i < _selectors.length; ++i) {
+        uint256 selectorsLength = _selectors.length;
+        for (uint256 i = 0; i < selectorsLength; ++i) {
             bytes4 selector = _selectors[i];
             SelectorToFacet memory oldFacet = ds.selectorToFacet[selector];
             require(oldFacet.facetAddress != address(0), "L"); // it is impossible to replace the facet with zero address
 
             _removeOneFunction(oldFacet.facetAddress, selector);
+            // Add facet to the list of facets if the facet address is a new one
+            _saveFacetIfNew(_facet);
             _addOneFunction(_facet, selector, _isFacetFreezable);
         }
     }
@@ -165,7 +171,8 @@ library Diamond {
 
         require(_facet == address(0), "a1"); // facet address must be zero
 
-        for (uint256 i = 0; i < _selectors.length; ++i) {
+        uint256 selectorsLength = _selectors.length;
+        for (uint256 i = 0; i < selectorsLength; ++i) {
             bytes4 selector = _selectors[i];
             SelectorToFacet memory oldFacet = ds.selectorToFacet[selector];
             require(oldFacet.facetAddress != address(0), "a2"); // Can't delete a non-existent facet
@@ -179,7 +186,7 @@ library Diamond {
     function _saveFacetIfNew(address _facet) private {
         DiamondStorage storage ds = getDiamondStorage();
 
-        uint16 selectorsLength = uint16(ds.facetToSelectors[_facet].selectors.length);
+        uint256 selectorsLength = ds.facetToSelectors[_facet].selectors.length;
         // If there are no selectors associated with facet then save facet as new one
         if (selectorsLength == 0) {
             ds.facetToSelectors[_facet].facetPosition = uint16(ds.facets.length);
@@ -200,6 +207,15 @@ library Diamond {
         DiamondStorage storage ds = getDiamondStorage();
 
         uint16 selectorPosition = uint16(ds.facetToSelectors[_facet].selectors.length);
+
+        // if selectorPosition is nonzero, it means it is not a new facet
+        // so the freezability of the first selector must be matched to _isSelectorFreezable
+        // so all the selectors in a facet will have the same freezability
+        if (selectorPosition != 0) {
+            bytes4 selector0 = ds.facetToSelectors[_facet].selectors[0];
+            require(_isSelectorFreezable == ds.selectorToFacet[selector0].isFreezable, "J1");
+        }
+
         ds.selectorToFacet[_selector] = SelectorToFacet({
             facetAddress: _facet,
             selectorPosition: selectorPosition,
@@ -270,7 +286,8 @@ library Diamond {
 
             // Check that called contract returns magic value to make sure that contract logic
             // supposed to be used as diamond cut initializer.
-            require(data.length == 32 && abi.decode(data, (bytes32)) == DIAMOND_INIT_SUCCESS_RETURN_VALUE, "lp");
+            require(data.length == 32, "lp");
+            require(abi.decode(data, (bytes32)) == DIAMOND_INIT_SUCCESS_RETURN_VALUE, "lp1");
         }
     }
 }

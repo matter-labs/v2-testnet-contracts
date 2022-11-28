@@ -1,6 +1,8 @@
+pragma solidity ^0.8.0;
+
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.0;
+
 
 import "../interfaces/IDiamondCut.sol";
 import "../libraries/Diamond.sol";
@@ -33,6 +35,10 @@ contract DiamondCutFacet is Base, IDiamondCut {
 
     /// @notice Removes the upgrade proposal. Only current governor can remove proposal.
     function cancelDiamondCutProposal() external onlyGovernor {
+        emit DiamondCutProposalCancelation(
+            s.diamondCutStorage.currentProposalId,
+            s.diamondCutStorage.proposedDiamondCutHash
+        );
         require(_resetProposal(), "g1"); // failed cancel diamond cut
     }
 
@@ -62,7 +68,7 @@ contract DiamondCutFacet is Base, IDiamondCut {
 
         if (diamondStorage.isFrozen) {
             diamondStorage.isFrozen = false;
-            emit Unfreeze();
+            emit Unfreeze(s.diamondCutStorage.lastDiamondFreezeTimestamp);
         }
 
         Diamond.diamondCut(_diamondCut);
@@ -77,6 +83,7 @@ contract DiamondCutFacet is Base, IDiamondCut {
         _resetProposal();
 
         diamondStorage.isFrozen = true;
+        // Limited-time freezing feature will be added in the future upgrades, so keeping this variable for simplification
         s.diamondCutStorage.lastDiamondFreezeTimestamp = block.timestamp;
 
         emit EmergencyFreeze();
@@ -92,27 +99,28 @@ contract DiamondCutFacet is Base, IDiamondCut {
 
         diamondStorage.isFrozen = false;
 
-        emit Unfreeze();
+        emit Unfreeze(s.diamondCutStorage.lastDiamondFreezeTimestamp);
     }
 
     /// @notice Gives another approval for the instant upgrade (diamond cut) by the security council member
     /// @param _diamondCutHash The hash of the diamond cut that security council members want to approve. Needed to prevent unintentional approvals, including reorg attacks
     function approveEmergencyDiamondCutAsSecurityCouncilMember(bytes32 _diamondCutHash) external {
         require(s.diamondCutStorage.securityCouncilMembers[msg.sender], "a9"); // not a security council member
-        require(
-            s.diamondCutStorage.securityCouncilMemberLastApprovedProposalId[msg.sender] <
-                s.diamondCutStorage.currentProposalId,
-            "ao"
-        ); // already approved this proposal
-        s.diamondCutStorage.securityCouncilMemberLastApprovedProposalId[msg.sender] = s
-            .diamondCutStorage
-            .currentProposalId;
+        uint256 currentProposalId = s.diamondCutStorage.currentProposalId;
+        require(s.diamondCutStorage.securityCouncilMemberLastApprovedProposalId[msg.sender] < currentProposalId, "ao"); // already approved this proposal
+        s.diamondCutStorage.securityCouncilMemberLastApprovedProposalId[msg.sender] = currentProposalId;
 
         require(s.diamondCutStorage.proposedDiamondCutTimestamp != 0, "f0"); // there is no proposed diamond cut
         require(s.diamondCutStorage.proposedDiamondCutHash == _diamondCutHash, "f1"); // proposed diamond cut do not match to the approved
-        s.diamondCutStorage.securityCouncilEmergencyApprovals++;
+        uint256 securityCouncilEmergencyApprovals = s.diamondCutStorage.securityCouncilEmergencyApprovals;
+        s.diamondCutStorage.securityCouncilEmergencyApprovals = securityCouncilEmergencyApprovals + 1;
 
-        emit EmergencyDiamondCutApproved(msg.sender);
+        emit EmergencyDiamondCutApproved(
+            msg.sender,
+            currentProposalId,
+            securityCouncilEmergencyApprovals,
+            _diamondCutHash
+        );
     }
 
     /// @dev Set up the proposed diamond cut state to the default values
@@ -122,11 +130,9 @@ contract DiamondCutFacet is Base, IDiamondCut {
             return false;
         }
 
-        s.diamondCutStorage.proposedDiamondCutHash = bytes32(0);
-        s.diamondCutStorage.proposedDiamondCutTimestamp = 0;
-        s.diamondCutStorage.securityCouncilEmergencyApprovals = 0;
-
-        emit DiamondCutProposalCancelation();
+        delete s.diamondCutStorage.proposedDiamondCutHash;
+        delete s.diamondCutStorage.proposedDiamondCutTimestamp;
+        delete s.diamondCutStorage.securityCouncilEmergencyApprovals;
 
         return true;
     }

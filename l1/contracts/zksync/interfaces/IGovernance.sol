@@ -1,6 +1,11 @@
+pragma solidity ^0.8;
+
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-pragma solidity ^0.8;
+
+
+import "../Verifier.sol";
+import "../Storage.sol";
 
 interface IGovernance {
     function setPendingGovernor(address _newPendingGovernor) external;
@@ -14,6 +19,10 @@ interface IGovernance {
     function setL2DefaultAccountBytecodeHash(bytes32 _l2DefaultAccountBytecodeHash) external;
 
     function setPorterAvailability(bool _isPorterAvailable) external;
+
+    function setVerifier(Verifier _newVerifier) external;
+
+    function setVerifierParams(VerifierParams calldata _newVerifierParams) external;
 
     /// @notice Сhanges to the bytecode that is used in L2 as a bootloader (start program)
     event NewL2BootloaderBytecodeHash(bytes32 indexed previousBytecodeHash, bytes32 indexed newBytecodeHash);
@@ -32,5 +41,11 @@ interface IGovernance {
     event NewPendingGovernor(address indexed oldPendingGovernor, address indexed newPendingGovernor);
 
     /// @notice Governor changed
-    event NewGovernor(address indexed newGovernor);
+    event NewGovernor(address indexed oldGovernor, address indexed newGovernor);
+
+    /// @notice Verifier address changed
+    event NewVerifier(address indexed oldVerifier, address indexed newVerifier);
+
+    /// @notice Verifier address changed
+    event NewVerifierParams(VerifierParams oldVerifierParams, VerifierParams newVerifierParams);
 }
