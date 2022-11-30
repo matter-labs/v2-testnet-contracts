@@ -7,22 +7,35 @@ import './Constants.sol';
 import "./interfaces/IERC20.sol";
 import "./interfaces/IPaymasterFlow.sol";
 
-// TODO: change it to the `0x80`, must be changed atomically with the server.
-/// @dev Denotes the first byte of the special zkSync's EIP-712-signed transaction.
+/// @dev The type id of zkSync's EIP-712-signed transaction.
 uint8 constant EIP_712_TX_TYPE = 0x71;
 
-/// @dev Denotes the first byte of some legacy transaction, which type is unknown to the server.
+/// @dev The type id of legacy transactions.
 uint8 constant LEGACY_TX_TYPE = 0x0;
+/// @dev The type id of EIP1559 transactions.
 uint8 constant EIP_1559_TX_TYPE = 0x02;
 
+
+/// @notice Structure used to represent zkSync transaction. 
 struct Transaction {
+	// The type of the transaction.
 	uint256 txType;
+	// The caller.
 	uint256 from;
+	// The callee.
 	uint256 to;
+	// The ergsLimit to pass with the transaction. 
+	// It has the same meaning as Ethereum's gasLimit.
 	uint256 ergsLimit;
+	// The maximum amount of ergs the user is willing to pay for a byte of pubdata.
 	uint256 ergsPerPubdataByteLimit;
+	// The maximum fee per erg that the user is willing to pay. 
+	// It is akin to EIP1559's maxFeePerGas.
 	uint256 maxFeePerErg;
+	// The maximum priority fee per erg that the user is willing to pay. 
+	// It is akin to EIP1559's maxPriorityFeePerGas.
 	uint256 maxPriorityFeePerErg;
+	// The transaction's paymaster. If there is no paymaster, it is equal to 0.
 	uint256 paymaster;
 	// In the future, we might want to add some
 	// new fields to the struct. The `txData` struct
@@ -33,15 +46,25 @@ struct Transaction {
 	// it would allow easier proof integration (in case we will need
 	// some special circuit for preprocessing transactions).
 	uint256[6] reserved;
+	// The transaction's calldata.
 	bytes data;
+	// The signature of the transaction.
 	bytes signature;
+	// The properly formatted hashes of bytecodes that must be published on L1
+	// with the inclusion of this transaction. Note, that a bytecode has been published
+	// before, the user won't pay fees for its republishing.
 	bytes32[] factoryDeps;
+	// The input to the paymaster.
 	bytes paymasterInput;
 	// Reserved dynamic type for the future use-case. Using it should be avoided,
 	// But it is still here, just in case we want to enable some additional functionality.
 	bytes reservedDynamic;
 }
 
+/**
+ * @author Matter Labs
+ * @notice Library used to help custom accounts to work with common methods for the Transaction type.
+ */
 library TransactionHelper {
 	/// @notice The EIP-712 typehash for the contract's domain
 	bytes32 constant EIP712_DOMAIN_TYPEHASH = keccak256('EIP712Domain(string name,string version,uint256 chainId)');
@@ -51,13 +74,20 @@ library TransactionHelper {
 			'Transaction(uint256 txType,uint256 from,uint256 to,uint256 ergsLimit,uint256 ergsPerPubdataByteLimit,uint256 maxFeePerErg,uint256 maxPriorityFeePerErg,uint256 paymaster,uint256 nonce,uint256 value,bytes data,bytes32[] factoryDeps,bytes paymasterInput)'
 		);
 
+	/// @notice Whether the token is Ethereum. 
+	/// @param _addr The address of the token
+	/// @return `true` or `false` based on whether the token is Ether.
+	/// @dev This method assumes that address is Ether either if the address is 0 (for convenience) 
+	/// or if the address is the address of the L2EthToken system contract. 
 	function isEthToken(uint256 _addr) internal pure returns (bool){
 		return _addr == uint256(uint160(address(ETH_TOKEN_SYSTEM_CONTRACT))) || _addr == 0;
 	}
 
+	/// @notice Calculate the suggested signed hash of the transaction, 
+	/// i.e. the hash that is signed by EOAs and is recommended to be signed by other accounts.
 	function encodeHash(Transaction calldata _transaction) internal view returns (bytes32 resultHash) {
 		if (_transaction.txType == LEGACY_TX_TYPE) {
-			resultHash = _encodeHashLegacyTx(_transaction);
+			resultHash = _encodeHashLegacyTransaction(_transaction);
 		} else if (_transaction.txType == EIP_712_TX_TYPE) {
 			resultHash = _encodeHashEIP712Tx(_transaction);
         } else if (_transaction.txType == EIP_1559_TX_TYPE) {
@@ -65,12 +95,12 @@ library TransactionHelper {
         } else {
 			// Currently no other transaction types are supported.
 			// Any new transaction types will be processed in a similar manner.
-			revert();
+			revert("Unsupported type for TransactionHelper.encodeHash");
 		}
 	}
 
-	/// @notice encode hash of the zkSync native transaction type.
-	/// @return keccak256 of the EIP-712 encoded representation of transaction
+	/// @notice Encode hash of the zkSync native transaction type.
+	/// @return keccak256 hash of the EIP-712 encoded representation of transaction
 	function _encodeHashEIP712Tx(Transaction calldata _transaction) private view returns (bytes32) {
         bytes32 structHash = keccak256(
             abi.encode(
@@ -96,9 +126,9 @@ library TransactionHelper {
 		return keccak256(abi.encodePacked('\x19\x01', domainSeparator, structHash));
 	}
 
-	/// @notice encode hash of the legacy transaction type.
+	/// @notice Encode hash of the legacy transaction type.
 	/// @return keccak256 of the serialized RLP encoded representation of transaction
-	function _encodeHashLegacyTx(Transaction calldata _transaction) private view returns (bytes32) {
+	function _encodeHashLegacyTransaction(Transaction calldata _transaction) private view returns (bytes32) {
 		// Hash of legacy transactions are encoded as one of the:
 		// - RLP(nonce, gasPrice, gasLimit, to, value, data, chainId, 0, 0)
 		// - RLP(nonce, gasPrice, gasLimit, to, value, data)
@@ -166,6 +196,9 @@ library TransactionHelper {
 			);
 	}
 
+
+	/// @notice Encode hash of the EIP1559 transaction type.
+	/// @return keccak256 of the serialized RLP encoded representation of transaction
     function _encodeHashEIP1559Tx(Transaction calldata _transaction) private view returns (bytes32) {
         // Hash of EIP1559 transactions is encoded the following way:
         // H(0x02 || RLP(chain_id, nonce, max_priority_fee_per_gas, max_fee_per_gas, gas_limit, destination, amount, data, access_list))
@@ -235,21 +268,27 @@ library TransactionHelper {
             );
     }
 
+	/// @notice Processes the common paymaster flows, e.g. setting proper allowance
+	/// for tokens, etc. For more information on the expected behaviour, check out 
+	/// the "Paymaster flows" section in the documentation.
 	function processPaymasterInput(Transaction calldata _transaction) internal {
 		require(_transaction.paymasterInput.length >= 4, "The standard paymaster input must be at least 4 bytes long");
 
 		bytes4 paymasterInputSelector = bytes4(_transaction.paymasterInput[0:4]);
 		if (paymasterInputSelector == IPaymasterFlow.approvalBased.selector) {
+			require(_transaction.paymasterInput.length >= 68, "The approvalBased paymaster input must be at least 68 bytes long");
+
 			// While the actual data consists of address, uint256 and bytes data, 
 			// the data is needed only for the paymaster, so we ignore it here for the sake of optimization
 			(address token, uint256 minAllowance) = abi.decode(_transaction.paymasterInput[4:68], (address, uint256));
 			address paymaster = address(uint160(_transaction.paymaster));
 
+			// We assume that this method will never fail for any reason that out-of-gas for 
+			// adequate ERC-20 compatible tokens.
 			uint256 currentAllowance = IERC20(token).allowance(address(this), paymaster);
 			if (currentAllowance < minAllowance) {
 				// Some tokens, e.g. USDT require that the allowance is firsty set to zero 
 				// and only then updated to the new value.
-				
 				IERC20(token).approve(paymaster, 0);
 				IERC20(token).approve(paymaster, minAllowance);
 			}
@@ -260,6 +299,9 @@ library TransactionHelper {
 		}
 	}
 
+	/// @notice Pays the required fee for the transaction to the bootloader.
+	/// @dev Currently it pays the maximum amount "_transaction.maxFeePerErg * _transaction.ergsLimit",
+	/// it will change in the future.
 	function payToTheBootloader(Transaction calldata _transaction) internal returns (bool success){
 		address bootloaderAddr = BOOTLOADER_FORMAL_ADDRESS;
 		uint256 amount = _transaction.maxFeePerErg * _transaction.ergsLimit;
@@ -276,4 +318,15 @@ library TransactionHelper {
 			)
 		}
 	}
+
+	// Returns the balance required to process the transaction.
+	function totalRequiredBalance(Transaction calldata _transaction) internal pure returns (uint256 requiredBalance) {
+		if(address(uint160(_transaction.paymaster)) != address(0)) {
+			// Paymaster pays for the fee
+			requiredBalance = _transaction.reserved[1];
+		} else {
+			// The user should have enough balance for both the fee and the value of the transaction
+			requiredBalance =  _transaction.maxFeePerErg * _transaction.ergsLimit + _transaction.reserved[1];
+		}
+	}	
 }
