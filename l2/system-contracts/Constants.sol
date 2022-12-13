@@ -10,7 +10,7 @@ import "./interfaces/IImmutableSimulator.sol";
 import "./interfaces/IEthToken.sol";
 import "./interfaces/IL1Messenger.sol";
 import "./interfaces/ISystemContext.sol";
-import "./BootloaderUtilities.sol";
+import "./interfaces/IBootloaderUtilities.sol";
 
 /// @dev All the system contracts introduced by zkSync have their addresses
 /// started from 2^15 in order to avoid collision with Ethereum precompiles.
@@ -42,7 +42,7 @@ address constant KECCAK256_SYSTEM_CONTRACT = address(SYSTEM_CONTRACTS_OFFSET + 0
 
 ISystemContext constant SYSTEM_CONTEXT_CONTRACT = ISystemContext(payable(address(SYSTEM_CONTRACTS_OFFSET + 0x0b)));
 
-BootloaderUtilities constant BOOTLOADER_UTILITIES = BootloaderUtilities(address(SYSTEM_CONTRACTS_OFFSET + 0x0c));
+IBootloaderUtilities constant BOOTLOADER_UTILITIES = IBootloaderUtilities(address(SYSTEM_CONTRACTS_OFFSET + 0x0c));
 
 /// @dev The number of bytes that are published during the contract deployment
 /// in addition to the bytecode itself.
