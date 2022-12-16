@@ -1,96 +1,102 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
-
 pragma solidity ^0.8.0;
 
-import "../common/libraries/UncheckedMath.sol";
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+
+
 import "./Plonk4VerifierWithAccessToDNext.sol";
+import "../common/libraries/UncheckedMath.sol";
 
 contract Verifier is Plonk4VerifierWithAccessToDNext {
     using UncheckedMath for uint256;
 
     function get_verification_key() internal pure returns (VerificationKey memory vk) {
         vk.num_inputs = 1;
-        vk.domain_size = 256;
-        vk.omega = PairingsBn254.new_fr(0x1058a83d529be585820b96ff0a13f2dbd8675a9e5dd2336a6692cc1e5a526c81);
+        vk.domain_size = 67108864;
+        vk.omega = PairingsBn254.new_fr(0x1dba8b5bdd64ef6ce29a9039aca3c0e524395c43b9227b96c75090cc6cc7ec97);
         // coefficients
         vk.gate_setup_commitments[0] = PairingsBn254.new_g1(
-            0x05f5cabc4eab14cfabee1334ef7f33a66259cc9fd07af862308d5c41765adb4b,
-            0x128a103fbe66c8ff697182c0963d963208b55a5a53ddeab9b4bc09dc2a68a9cc
+            0x19af674d98a56e4b530aa94bf82df98768bb214aa1f261b1d1fb6789f9e66d67,
+            0x0335e647418f85e76d27feca0cce7027b92b0eabf93888219b9beca066886730
         );
         vk.gate_setup_commitments[1] = PairingsBn254.new_g1(
-            0x0d9980170c334c107e6ce4d66bbc4d23bbcdc97c020b1e1c3f6e04c6c663d2c2,
-            0x0968205845091ceaf3f863b1613fbdf7ce9a87ccfd97f22011679e6350384419
+            0x0503f826267486c0a6d73afb4d9a8f0ed019d5d129fcedcbfa0b2970c8a3d7fa,
+            0x008af7d231afc190a96c02da5cc6721fcff5e01ba1ad65540a3fde576802d1cd
         );
         vk.gate_setup_commitments[2] = PairingsBn254.new_g1(
-            0x0c84a19b149a1612cb042ad86382b9e94367c0add60d07e12399999e7db09efe,
-            0x1e02f70c44c9bfb7bf2164cee2ab4813bcb9be56eb432e2e9dfffffe196d846d
+            0x0198011f9c1c53811036bc8e0e8002c1b8892001e9ce0cd18110af9a03087421,
+            0x25933f6eb6db13720269a863a55db5dd31c96b1ee0da61e34e09f83a59297ca2
         );
         vk.gate_setup_commitments[3] = PairingsBn254.new_g1(
-            0x1eb3599506a41a7d62e1f7438d6732fbb9d1eda7b9c7a0213eca63c9334ac5a9,
-            0x23563d9f429908d8ea80bffa642840fb081936d45b388bafc504d9b1e5b1c410
+            0x17e76e39a1a2e71f32b5cab55c4eef178a632e7d907153e06f53e364dbd2cbc8,
+            0x21fccb59891624d9d9d35d0f661afb120ca1f78628b8aa59beeefd4431107e88
         );
         vk.gate_setup_commitments[4] = PairingsBn254.new_g1(
-            0x0000000000000000000000000000000000000000000000000000000000000000,
-            0x0000000000000000000000000000000000000000000000000000000000000001
+            0x1b041d57c56b8521f2520442e462f755721ab4aeb573487618ce09910a8c6354,
+            0x0e4ec17897446c4fd1c36559405a0d2def071c4ad5b9124116db5654129ffed5
         );
         vk.gate_setup_commitments[5] = PairingsBn254.new_g1(
-            0x063e8dac7ee3ee6a4569fd53b416fe17f8f10de8c435c336e5a1cf2e02643200,
-            0x1d4c1781b78f926d55f89ef72abb96bee350ce60ddc684f5a02d87c5f4cdf943
+            0x2a06f3104a04d0a5272f5e623cdecdce7e06b4aef361be0786f3a6814280d05b,
+            0x21541f91d1e19e517d6471dba9f048355896e9a2bf7ececbecbdc63431ecb261
         );
         vk.gate_setup_commitments[6] = PairingsBn254.new_g1(
-            0x0000000000000000000000000000000000000000000000000000000000000000,
-            0x0000000000000000000000000000000000000000000000000000000000000001
+            0x204b887749553f1d24bec0f6066088454b586d25fc57d716679517d12082e1ed,
+            0x27f989c5dd011c6aaf441068780f3b133eb2bde878843155c85abeec4ab91f11
+        );
+        vk.gate_setup_commitments[7] = PairingsBn254.new_g1(
+            0x1a8cd862024729474b1b5ef122acf86f759433abaefdcfb8fa7e6ad761b112b2,
+            0x2a80832c2d1f2e7aa625b720d14b93f628c107ef41d78d492aa123c75d97a848
         );
         // gate selectors
         vk.gate_selectors_commitments[0] = PairingsBn254.new_g1(
-            0x0b487eb34c8480ea506f5c6c25857155d61d7f9824b60bc80e1a415a5bcf247f,
-            0x07ea0d0d0df9dbcc944e9341a5bb49ae796d9dc9d7ca1c032b53784715b946db
+            0x1633993f359a7b1738f2fbd69ce7643e423570fb0a6fe55a244bea41596dfc3d,
+            0x2cf6203dad1d1295d1793cdd114195c129b0ecc663f4e92917c1490980385a44
         );
         vk.gate_selectors_commitments[1] = PairingsBn254.new_g1(
-            0x0fa66faa0b9ea782eb400175ac9f0c05f0de64332eec54a87cd20db4540baec2,
-            0x07dea33d314c690c4bd4b21deda1a44b9f8dd87e539024622768c2f8b8bdabe1
+            0x10f0ab2fda24f693b7851a3c626c5eb3dd1ef9bacc68fdbfe638466f8fc2b949,
+            0x15fde64ce1ae3313f039d7b9b7f192fa5a7b0bd80307c67cfed47fae20f008e4
         );
         // permutation
         vk.permutation_commitments[0] = PairingsBn254.new_g1(
-            0x120482c52e31d2373f9b2dc80a47e68f035e278d220fa8a89d0c81f133343953,
-            0x02928a78ea2e1a943e9220b7e288fd48a561263f8e5f94518f21aaa43781ceac
+            0x03a5af959e223de35693573bc896f333fac84cfe4f272c4080bc102e4c4752b3,
+            0x102cd8e77890c56a99a9cf9bb964ee3e3b60629e35f60b94a97932903b31cbc6
         );
         vk.permutation_commitments[1] = PairingsBn254.new_g1(
-            0x1dfad2c4d60704bcf6af0abd9cce09151f063c4b52200c268e470c6a6c93cbca,
-            0x08b28dd6ca14d7c33e078fe0f332a9a4d95ac8df171355de9e69930aec02b5dc
+            0x0f4c46be8af3e4fa5e0ce6d2985b1db29177975309e55748da391d2b81c98288,
+            0x1c5bed67fe034739a649e373e684120495431377c2d4e81689d678635ea737b2
         );
         vk.permutation_commitments[2] = PairingsBn254.new_g1(
-            0x0935a4fd6ab67925929661cf2d2e814f87f589ee6234cb9675ecc2d897f1b338,
-            0x1032ccc41c047413fce4a847ba7e51e4a2ea406d89a88d480c5f0efaf6c8c89a
+            0x2a990254375e7cc9bec8ab68e5a5ec5ee49de5b2a6b0b33cecb557125aa93b43,
+            0x046b3e9a530f72b2a8d3226b1285ce7b656bb112e243750664fe066423bcb4ca
         );
         vk.permutation_commitments[3] = PairingsBn254.new_g1(
-            0x0eafaea3af7d1fadb2138db1b991af5d2218f6892714fd019898c7e1a43ecfe8,
-            0x28fb17eda285ed74cc9771d62fad22ab459bbb0a4968c489972aca8b7e618fcb
+            0x281baa0297d9c6d6a8d79caa59fa5dd78efe760dfd4a1ae7575b8b996497e4cc,
+            0x22a32326f73a3d070184f7da88ebec776d1ef63207bb2b5e04d28307eeed9c47
         );
         // lookup table commitments
         vk.lookup_selector_commitment = PairingsBn254.new_g1(
-            0x155201a564e721b1f5c06315ad4e24eaad3cbdd6197b19cd903fe85613080f86,
-            0x12fb201bc896572ac14357e2601f5118636f1eeb7b89c177ac940aac3b5253ec
+            0x1035bcc4f67bc18af0db54384cc120d50060121d3b2a4e8698937756b3f73b54,
+            0x1b1eebcd824d7b114cd230e0a450b63ff5218a6141bb5bf013a79ba2ab6f7ddb
         );
         vk.lookup_tables_commitments[0] = PairingsBn254.new_g1(
-            0x1cb0e2ae4d52743898d94d7f1729bd0d3357ba035cdb6b3af7ebff9159f8f297,
-            0x15ee595227c9e0f7a487ddb8072d5ea3cfd058bc569211c3546bc0e80051553f
+            0x0ebe0de4a2f39df3b903da484c1641ffdffb77ff87ce4f9508c548659eb22d3c,
+            0x12a3209440242d5662729558f1017ed9dcc08fe49a99554dd45f5f15da5e4e0b
         );
         vk.lookup_tables_commitments[1] = PairingsBn254.new_g1(
-            0x13e4ab94c03a5a29719930c1361d854e244cf918f1e29cb031303f4a13b71977,
-            0x0f792ef4c6c8746c97be61ed9b20f31ba2dec3bd5c91a2d9a4a586f19af3a07c
+            0x1b7d54f8065ca63bed0bfbb9280a1011b886d07e0c0a26a66ecc96af68c53bf9,
+            0x2c51121fff5b8f58c302f03c74e0cb176ae5a1d1730dec4696eb9cce3fe284ca
         );
         vk.lookup_tables_commitments[2] = PairingsBn254.new_g1(
-            0x1c9e69bd2b04240ebe44fb23d67c596fce4a1336109fdce38c2f184a63cd8acc,
-            0x1cbd3e72bdbce827227e503690b10be9365ae760e9d2babde5ba81edf12f8206
+            0x0138733c5faa9db6d4b8df9748081e38405999e511fb22d40f77cf3aef293c44,
+            0x269bee1c1ac28053238f7fe789f1ea2e481742d6d16ae78ed81e87c254af0765
         );
         vk.lookup_tables_commitments[3] = PairingsBn254.new_g1(
-            0x2a0d46339fbf72104df6a241b53a957602b1a16f6e3b9f89bf3e4c4645df823c,
-            0x11a601d7b2eee4b7885f34c9873426ba1263f38eae2e0351d653b8b1ba9c67f6
+            0x1b1be7279d59445065a95f01f16686adfa798ec4f1e6845ffcec9b837e88372e,
+            0x057c90cb96d8259238ed86b05f629efd55f472a721efeeb56926e979433e6c0e
         );
         vk.lookup_table_type_commitment = PairingsBn254.new_g1(
-            0x1a70e43f18b18d686807c2b1c6471cd949dd251b48090bca443d86b97afae951,
-            0x0e6e23ad15a1bd851b228788ae4a03bf25bda39ede6d5a92d501a8402a0dfe43
+            0x011967367ae87879d15a58c58e4849bc897764ce3f016d5abc04bc7804d6bdf7,
+            0x29775ffa2d2ddd439a664e165294f68ea17d6d754bcf4c20a52fbf766eeb1995
         );
         // non residues
         vk.non_residues[0] = PairingsBn254.new_fr(0x0000000000000000000000000000000000000000000000000000000000000005);

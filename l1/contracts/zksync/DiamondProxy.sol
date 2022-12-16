@@ -1,13 +1,18 @@
+pragma solidity ^0.8.0;
+
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-pragma solidity ^0.8.0;
+
 
 import "./libraries/Diamond.sol";
 
 /// @title Diamond Proxy Cotract (EIP-2535)
 /// @author Matter Labs
 contract DiamondProxy {
-    constructor(Diamond.DiamondCutData memory _diamondCut) {
+    constructor(uint256 _chainId, Diamond.DiamondCutData memory _diamondCut) {
+        // Check that the contract is deployed on the expected chain.
+        // Thus, the contract deployed by the same Create2 factory on the different chain will have different addresses!
+        require(_chainId == block.chainid, "pr");
         Diamond.diamondCut(_diamondCut);
     }
 

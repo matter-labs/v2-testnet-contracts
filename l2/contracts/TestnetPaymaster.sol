@@ -1,6 +1,8 @@
+pragma solidity ^0.8.0;
+
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.0;
+
 
 import "./interfaces/IPaymaster.sol";
 import "./interfaces/IPaymasterFlow.sol";
@@ -36,7 +38,18 @@ contract TestnetPaymaster is IPaymaster {
             require(amount >= requiredETH, "User does not provide enough tokens to exchange");
 
             // Pulling all the tokens from the user
-            IERC20(token).transferFrom(userAddress, thisAddress, amount);
+            try IERC20(token).transferFrom(userAddress, thisAddress, amount) {} catch (bytes memory revertReason) {
+                // If the revert reason is empty or represented by just a function selector,
+                // we replace the error with a more user-friendly message
+                if (revertReason.length <= 4) {
+                    revert("Failed to transferFrom from users' account");
+                } else {
+                    assembly {
+                        revert(add(0x20, revertReason), mload(revertReason))
+                    }
+                }
+            }
+
             // The bootloader never returns any data, so it can safely be ignored here.
             (bool success, ) = payable(BOOTLOADER_ADDRESS).call{value: requiredETH}("");
             require(success, "Failed to transfer funds to the bootloader");

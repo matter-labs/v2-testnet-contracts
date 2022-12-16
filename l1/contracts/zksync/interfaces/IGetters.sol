@@ -1,6 +1,10 @@
+pragma solidity ^0.8.0;
+
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-pragma solidity ^0.8;
+
+
+import "../libraries/PriorityQueue.sol";
 
 interface IGetters {
     /*//////////////////////////////////////////////////////////////
@@ -10,6 +14,8 @@ interface IGetters {
     function getVerifier() external view returns (address);
 
     function getGovernor() external view returns (address);
+
+    function getPendingGovernor() external view returns (address);
 
     function getTotalBlocksCommitted() external view returns (uint256);
 
@@ -21,13 +27,31 @@ interface IGetters {
 
     function getFirstUnprocessedPriorityTx() external view returns (uint256);
 
+    function getPriorityQueueSize() external view returns (uint256);
+
+    function priorityQueueFrontOperation() external view returns (PriorityOperation memory);
+
     function isValidator(address _address) external view returns (bool);
 
-    function l2LogsRootHash(uint32 blockNumber) external view returns (bytes32 hash);
+    function l2LogsRootHash(uint256 _blockNumber) external view returns (bytes32 hash);
 
-    function isFunctionFreezable(bytes4 _selector) external view returns (bool);
+    function storedBlockHash(uint256 _blockNumber) external view returns (bytes32);
 
-    function isFacetFreezable(address _facet) external view returns (bool);
+    function isDiamondStorageFrozen() external view returns (bool);
+
+    function getProposedDiamondCutHash() external view returns (bytes32);
+
+    function getProposedDiamondCutTimestamp() external view returns (uint256);
+
+    function getLastDiamondFreezeTimestamp() external view returns (uint256);
+
+    function getCurrentProposalId() external view returns (uint256);
+
+    function getSecurityCouncilEmergencyApprovals() external view returns (uint256);
+
+    function isSecurityCouncilMember(address _address) external view returns (bool);
+
+    function getSecurityCouncilMemberLastApprovedProposalId(address _address) external view returns (uint256);
 
     /*//////////////////////////////////////////////////////////////
                             DIAMOND LOUPE
@@ -48,4 +72,6 @@ interface IGetters {
     function facetAddresses() external view returns (address[] memory facets);
 
     function facetAddress(bytes4 _selector) external view returns (address facet);
+
+    function isFunctionFreezable(bytes4 _selector) external view returns (bool);
 }

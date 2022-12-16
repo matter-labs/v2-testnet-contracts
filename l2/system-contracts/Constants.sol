@@ -10,8 +10,14 @@ import "./interfaces/IImmutableSimulator.sol";
 import "./interfaces/IEthToken.sol";
 import "./interfaces/IL1Messenger.sol";
 import "./interfaces/ISystemContext.sol";
+import "./interfaces/IBootloaderUtilities.sol";
 
+/// @dev All the system contracts introduced by zkSync have their addresses
+/// started from 2^15 in order to avoid collision with Ethereum precompiles.
 uint160 constant SYSTEM_CONTRACTS_OFFSET = 0x8000; // 2^15
+
+/// @dev All the system contracts must be located in the kernel space, 
+/// i.e. their addresses must be below 2^16.
 uint160 constant MAX_SYSTEM_CONTRACT_ADDRESS = 0xffff; // 2^16 - 1
 
 address constant ECRECOVER_SYSTEM_CONTRACT = address(0x01);
@@ -36,10 +42,19 @@ address constant KECCAK256_SYSTEM_CONTRACT = address(SYSTEM_CONTRACTS_OFFSET + 0
 
 ISystemContext constant SYSTEM_CONTEXT_CONTRACT = ISystemContext(payable(address(SYSTEM_CONTRACTS_OFFSET + 0x0b)));
 
-bytes32 constant DEFAULT_ACCOUNT_CODE_HASH = 0x00;
+IBootloaderUtilities constant BOOTLOADER_UTILITIES = IBootloaderUtilities(address(SYSTEM_CONTRACTS_OFFSET + 0x0c));
 
-// The number of bytes that are published during the contract deployment
-// in addition to the bytecode itself.
+/// @dev The number of bytes that are published during the contract deployment
+/// in addition to the bytecode itself.
 uint256 constant BYTECODE_PUBLISHING_OVERHEAD = 100;
 
+/// @dev If the bitwise AND of the second extraAbi param when calling the MSG_VALUE_SIMULATOR
+/// is non-zero, the call will be assumed to be a system one. 
 uint256 constant MSG_VALUE_SIMULATOR_IS_SYSTEM_BIT = 2**128;
+
+/// @dev Prefix used during derivation of account addresses using CREATE2
+/// @dev keccak256("zksyncCreate2")
+bytes32 constant CREATE2_PREFIX = 0x2020dba91b30cc0006188af794c2fb30dd8520db7e2c088b7fc7c103c00ca494;
+/// @dev Prefix used during derivation of account addresses using CREATE
+/// @dev keccak256("zksyncCreate")
+bytes32 constant CREATE_PREFIX = 0x63bae3a9951d38e8a3fbb7b70909afc1200610fc5bc55ade242f815974674f23;

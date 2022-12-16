@@ -1,6 +1,8 @@
+pragma solidity ^0.8.0;
+
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-pragma solidity ^0.8.0;
+
 
 import "../interfaces/IMailbox.sol";
 import "../libraries/Merkle.sol";
@@ -20,6 +22,7 @@ contract MailboxFacet is Base, IMailbox {
     /// @param _index The position in the L2 logs Merkle tree of the l2Log that was sent with the message
     /// @param _message Information about the sent message: sender address, the message itself, tx index in the L2 block where the message was sent
     /// @param _proof Merkle proof for inclusion of L2 log that was sent with the message
+    /// @return Whether the proof is valid
     function proveL2MessageInclusion(
         uint256 _blockNumber,
         uint256 _index,
@@ -55,6 +58,13 @@ contract MailboxFacet is Base, IMailbox {
         bytes32 hashedLog = keccak256(
             abi.encodePacked(_log.l2ShardId, _log.isService, _log.txNumberInBlock, _log.sender, _log.key, _log.value)
         );
+        // Check that hashed log is not the default one,
+        // otherwise it means that the value is out of range of sent L2 -> L1 logs
+        require(hashedLog != L2_L1_LOGS_TREE_DEFAULT_LEAF_HASH, "tw");
+        // Check that the proof length is exactly the same as tree height, to prevent
+        // any shorter/longer paths attack on the Merkle path validation
+        require(_proof.length == L2_TO_L1_LOG_MERKLE_TREE_HEIGHT, "rz");
+
         bytes32 calculatedRootHash = Merkle.calculateRoot(_proof, _index, hashedLog);
         bytes32 actualRootHash = s.l2LogsRootHashes[_blockNumber];
 
@@ -75,6 +85,7 @@ contract MailboxFacet is Base, IMailbox {
     }
 
     /// @notice Estimates the cost in Ether of requesting execution of an L2 transaction from L1
+    /// @return The estimated ergs
     function l2TransactionBaseCost(
         uint256, // _gasPrice
         uint256, // _ergsLimit
@@ -99,7 +110,7 @@ contract MailboxFacet is Base, IMailbox {
         uint256 _ergsLimit,
         bytes[] calldata _factoryDeps
     ) external payable nonReentrant senderCanCallFunction(s.allowList) returns (bytes32 canonicalTxHash) {
-        return _requestL2Transaction(msg.sender, _contractL2, _l2Value, _calldata, _ergsLimit, _factoryDeps);
+        canonicalTxHash = _requestL2Transaction(msg.sender, _contractL2, _l2Value, _calldata, _ergsLimit, _factoryDeps);
     }
 
     function _requestL2Transaction(
@@ -112,7 +123,7 @@ contract MailboxFacet is Base, IMailbox {
     ) internal returns (bytes32 canonicalTxHash) {
         require(_ergsLimit <= PRIORITY_TX_MAX_ERGS_LIMIT, "ui");
         uint64 expirationBlock = uint64(block.number + PRIORITY_EXPIRATION);
-        uint256 txId = s.priorityQueue.head;
+        uint256 txId = s.priorityQueue.getTotalPriorityTxs();
         // TODO: Restore after stable priority op fee modeling. (SMA-1230)
         // uint256 baseCost = l2TransactionBaseCost(tx.gasprice, _ergsLimit, uint32(_calldata.length));
         // uint256 layer2Tip = msg.value - baseCost;
@@ -172,6 +183,7 @@ contract MailboxFacet is Base, IMailbox {
     /// @param _calldata The input of the L2 transaction
     /// @param _ergsLimit Maximum amount of ergs that transaction can consume during execution on L2
     /// @param _factoryDeps An array of L2 bytecodes that will be marked as known on L2
+    /// @return The canonical form of the l2 transaction parameters
     function serializeL2Transaction(
         uint256 _txId,
         uint256 _l2Value,
