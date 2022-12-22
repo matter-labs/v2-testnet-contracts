@@ -53,6 +53,7 @@ contract TestnetPaymaster is IPaymaster {
             // The bootloader never returns any data, so it can safely be ignored here.
             (bool success, ) = payable(BOOTLOADER_ADDRESS).call{value: requiredETH}("");
             require(success, "Failed to transfer funds to the bootloader");
+            return context;
         } else {
             revert("Unsupported paymaster flow");
         }
