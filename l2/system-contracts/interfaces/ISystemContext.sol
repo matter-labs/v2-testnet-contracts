@@ -1,10 +1,10 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 
 pragma solidity ^0.8.0;
 
 /**
  * @author Matter Labs
- * @notice Contract that stores some of the context variables, that may be either 
+ * @notice Contract that stores some of the context variables, that may be either
  * block-scoped, tx-scoped or system-wide.
  */
 interface ISystemContext {
@@ -12,15 +12,13 @@ interface ISystemContext {
 
     function origin() external view returns (address);
 
-    function ergsPrice() external view returns (uint256);
+    function gasPrice() external view returns (uint256);
 
-    function blockErgsLimit() external view returns (uint256);
+    function blockGasLimit() external view returns (uint256);
 
     function coinbase() external view returns (address);
 
     function difficulty() external view returns (uint256);
-
-    function msize() external view returns (uint256);
 
     function baseFee() external view returns (uint256);
 
@@ -30,7 +28,7 @@ interface ISystemContext {
 
     function getBlockNumberAndTimestamp() external view returns (uint256 blockNumber, uint256 blockTimestamp);
 
-    // Note, that for now, the implementation of the bootloader allows this variables to 
+    // Note, that for now, the implementation of the bootloader allows this variables to
     // be incremented multiple times inside a block, so it should not relied upon right now.
     function getBlockNumber() external view returns (uint256);
 

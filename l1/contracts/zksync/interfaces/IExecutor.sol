@@ -1,8 +1,6 @@
-pragma solidity ^0.8;
+// SPDX-License-Identifier: MIT
 
-// SPDX-License-Identifier: MIT OR Apache-2.0
-
-
+pragma solidity ^0.8.0;
 
 interface IExecutor {
     /// @notice Rollup block stored data
@@ -30,7 +28,6 @@ interface IExecutor {
     /// @param timestamp Unix timestamp denoting the start of the block execution
     /// @param indexRepeatedStorageChanges The serial number of the shortcut index that's used as a unique identifier for storage keys that were used twice or more
     /// @param newStateRoot The state root of the full state tree
-    /// @param ergsPerPubdataByteInBlock Price in ergs per one byte of published pubdata in block
     /// @param numberOfLayer1Txs Number of priority operations to be processed
     /// @param l2LogsTreeRoot The root hash of the tree that contains all L2 -> L1 logs in the block
     /// @param priorityOperationsHash Hash of all priority operations from this block
@@ -55,20 +52,9 @@ interface IExecutor {
     }
 
     /// @notice Recursive proof input data (individual commitments are constructed onchain)
-    /// TODO: The verifier integration is not finished yet, change the structure for compatibility later
     struct ProofInput {
-        uint256[] recurisiveAggregationInput;
+        uint256[] recursiveAggregationInput;
         uint256[] serializedProof;
-    }
-
-    /// @notice Specifies whether to verify Zero Knowledge Proof for the block or just ignore the proof
-    /// @dev This is a temporary measure for the first release, a validator can skip block verification
-    /// if they failed to create the proof or faced any infrastructure issues
-    /// @param Ignore The provided proof does NOT need to be verified
-    /// @param Verify The provided proof does need to be verified
-    enum BlockVerificationMode {
-        Ignore,
-        Verify
     }
 
     function commitBlocks(StoredBlockInfo calldata _lastCommittedBlockData, CommitBlockInfo[] calldata _newBlocksData)
@@ -77,8 +63,7 @@ interface IExecutor {
     function proveBlocks(
         StoredBlockInfo calldata _prevBlock,
         StoredBlockInfo[] calldata _committedBlocks,
-        ProofInput calldata _proof,
-        BlockVerificationMode _verificationMode
+        ProofInput calldata _proof
     ) external;
 
     function executeBlocks(StoredBlockInfo[] calldata _blocksData) external;
@@ -89,11 +74,7 @@ interface IExecutor {
     event BlockCommit(uint256 indexed blockNumber, bytes32 indexed blockHash, bytes32 indexed commitment);
 
     /// @notice Event emitted when blocks are verified
-    event BlocksVerification(
-        uint256 indexed previousLastVerifiedBlock,
-        uint256 indexed currentLastVerifiedBlock,
-        BlockVerificationMode verificationMode
-    );
+    event BlocksVerification(uint256 indexed previousLastVerifiedBlock, uint256 indexed currentLastVerifiedBlock);
 
     /// @notice Event emitted when a block is executed
     event BlockExecution(uint256 indexed blockNumber, bytes32 indexed blockHash, bytes32 indexed commitment);

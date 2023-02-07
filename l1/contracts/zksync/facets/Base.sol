@@ -1,8 +1,6 @@
+// SPDX-License-Identifier: MIT
+
 pragma solidity ^0.8.0;
-
-// SPDX-License-Identifier: MIT OR Apache-2.0
-
-
 
 import "../Storage.sol";
 import "../../common/ReentrancyGuard.sol";
@@ -22,6 +20,11 @@ contract Base is ReentrancyGuard, AllowListed {
     /// @notice Checks if validator is active
     modifier onlyValidator() {
         require(s.validators[msg.sender], "1h"); // validator is not active
+        _;
+    }
+
+    modifier onlySecurityCouncil() {
+        require(msg.sender == s.upgrades.securityCouncil, "a9"); // not a security council
         _;
     }
 }

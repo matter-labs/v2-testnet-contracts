@@ -1,10 +1,10 @@
+// SPDX-License-Identifier: MIT
+
 pragma solidity ^0.8.0;
 
-// SPDX-License-Identifier: MIT OR Apache-2.0
-
-
-
+import "../Storage.sol";
 import "../libraries/PriorityQueue.sol";
+import {VerifierParams} from "../Storage.sol";
 
 interface IGetters {
     /*//////////////////////////////////////////////////////////////
@@ -37,21 +37,29 @@ interface IGetters {
 
     function storedBlockHash(uint256 _blockNumber) external view returns (bytes32);
 
+    function getL2BootloaderBytecodeHash() external view returns (bytes32);
+
+    function getL2DefaultAccountBytecodeHash() external view returns (bytes32);
+
+    function getVerifierParams() external view returns (VerifierParams memory);
+
     function isDiamondStorageFrozen() external view returns (bool);
 
-    function getProposedDiamondCutHash() external view returns (bytes32);
+    function getSecurityCouncil() external view returns (address);
 
-    function getProposedDiamondCutTimestamp() external view returns (uint256);
+    function getUpgradeProposalState() external view returns (UpgradeState);
 
-    function getLastDiamondFreezeTimestamp() external view returns (uint256);
+    function getProposedUpgradeHash() external view returns (bytes32);
+
+    function getProposedUpgradeTimestamp() external view returns (uint256);
 
     function getCurrentProposalId() external view returns (uint256);
 
-    function getSecurityCouncilEmergencyApprovals() external view returns (uint256);
+    function isApprovedBySecurityCouncil() external view returns (bool);
 
-    function isSecurityCouncilMember(address _address) external view returns (bool);
+    function getpriorityTxMaxGasLimit() external view returns (uint256);
 
-    function getSecurityCouncilMemberLastApprovedProposalId(address _address) external view returns (uint256);
+    function isEthWithdrawalFinalized(uint256 _l2BlockNumber, uint256 _l2MessageIndex) external view returns (bool);
 
     /*//////////////////////////////////////////////////////////////
                             DIAMOND LOUPE
@@ -74,4 +82,6 @@ interface IGetters {
     function facetAddress(bytes4 _selector) external view returns (address facet);
 
     function isFunctionFreezable(bytes4 _selector) external view returns (bool);
+
+    function isFacetFreezable(address _facet) external view returns (bool isFreezable);
 }

@@ -1,40 +1,45 @@
-pragma solidity ^0.8;
+// SPDX-License-Identifier: MIT
 
-// SPDX-License-Identifier: MIT OR Apache-2.0
-
-
+pragma solidity ^0.8.0;
 
 import "../libraries/Diamond.sol";
 
 interface IDiamondCut {
-    function proposeDiamondCut(Diamond.FacetCut[] calldata _facetCuts, address _initAddress) external;
+    function proposeTransparentUpgrade(Diamond.DiamondCutData calldata _diamondCut, uint40 _proposalId) external;
 
-    function cancelDiamondCutProposal() external;
+    function proposeShadowUpgrade(bytes32 _proposalHash, uint40 _proposalId) external;
 
-    function executeDiamondCutProposal(Diamond.DiamondCutData calldata _diamondCut) external;
+    function cancelUpgradeProposal(bytes32 _proposedUpgradeHash) external;
 
-    function emergencyFreezeDiamond() external;
+    function securityCouncilUpgradeApprove(bytes32 _upgradeProposalHash) external;
+
+    function executeUpgrade(Diamond.DiamondCutData calldata _diamondCut, bytes32 _proposalSalt) external;
+
+    function freezeDiamond() external;
 
     function unfreezeDiamond() external;
 
-    function approveEmergencyDiamondCutAsSecurityCouncilMember(bytes32 _diamondCutHash) external;
+    function upgradeProposalHash(
+        Diamond.DiamondCutData calldata _diamondCut,
+        uint256 _proposalId,
+        bytes32 _salt
+    ) external pure returns (bytes32);
 
-    // FIXME: token holders should have the ability to cancel the upgrade
-
-    event DiamondCutProposal(Diamond.FacetCut[] _facetCuts, address _initAddress);
-
-    event DiamondCutProposalCancelation(uint256 currentProposalId, bytes32 indexed proposedDiamondCutHash);
-
-    event DiamondCutProposalExecution(Diamond.DiamondCutData _diamondCut);
-
-    event EmergencyFreeze();
-
-    event Unfreeze(uint256 lastDiamondFreezeTimestamp);
-
-    event EmergencyDiamondCutApproved(
-        address indexed _address,
-        uint256 currentProposalId,
-        uint256 securityCouncilEmergencyApprovals,
-        bytes32 indexed proposedDiamondCutHash
+    event ProposeTransparentUpgrade(
+        Diamond.DiamondCutData diamondCut,
+        uint256 indexed proposalId,
+        bytes32 proposalSalt
     );
+
+    event ProposeShadowUpgrade(uint256 indexed proposalId, bytes32 indexed proposalHash);
+
+    event CancelUpgradeProposal(uint256 indexed proposalId, bytes32 indexed proposalHash);
+
+    event SecurityCouncilUpgradeApprove(uint256 indexed proposalId, bytes32 indexed proposalHash);
+
+    event ExecuteUpgrade(uint256 indexed proposalId, bytes32 indexed proposalHash, bytes32 proposalSalt);
+
+    event Freeze();
+
+    event Unfreeze();
 }

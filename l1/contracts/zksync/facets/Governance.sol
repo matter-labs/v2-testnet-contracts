@@ -1,8 +1,6 @@
-pragma solidity ^0.8.0;
-
 // SPDX-License-Identifier: MIT
 
-
+pragma solidity ^0.8.0;
 
 import "../interfaces/IGovernance.sol";
 import "../../common/L2ContractHelper.sol";
@@ -108,5 +106,15 @@ contract GovernanceFacet is Base, IGovernance {
 
         s.verifierParams = _newVerifierParams;
         emit NewVerifierParams(oldVerifierParams, _newVerifierParams);
+    }
+
+    /// @notice Change the max L2 gas limit for L1 -> L2 transactions
+    /// @param _newPriorityTxMaxGasLimit The maximum number of L2 gas that a user can request for L1 -> L2 transactions
+    function setPriorityTxMaxGasLimit(uint256 _newPriorityTxMaxGasLimit) external onlyGovernor {
+        uint256 oldPriorityTxMaxGasLimit = s.priorityTxMaxGasLimit;
+        if (oldPriorityTxMaxGasLimit != _newPriorityTxMaxGasLimit) {
+            s.priorityTxMaxGasLimit = _newPriorityTxMaxGasLimit;
+            emit NewPriorityTxMaxGasLimit(oldPriorityTxMaxGasLimit, _newPriorityTxMaxGasLimit);
+        }
     }
 }

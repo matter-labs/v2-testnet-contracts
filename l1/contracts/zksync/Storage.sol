@@ -1,29 +1,35 @@
+// SPDX-License-Identifier: MIT
+
 pragma solidity ^0.8.0;
-
-// SPDX-License-Identifier: MIT OR Apache-2.0
-
-
 
 import "./Verifier.sol";
 import "../common/interfaces/IAllowList.sol";
 import "./libraries/PriorityQueue.sol";
 
+/// @notice Indicates whether an upgrade is initiated and if yes what type
+/// @param None Upgrade is NOT initiated
+/// @param Transparent Fully transparent upgrade is initiated, upgrade data is publicly known
+/// @param Shadow Shadow upgrade is initiated, upgrade data is hidden
+enum UpgradeState {
+    None,
+    Transparent,
+    Shadow
+}
+
 /// @dev Logically separated part of the storage structure, which is responsible for everything related to proxy upgrades and diamond cuts
-/// @param proposedDiamondCutHash The hash of diamond cut that was proposed in the current upgrade
-/// @param proposedDiamondCutTimestamp The timestamp when the diamond cut was proposed, zero if there are no active proposals
-/// @param lastDiamondFreezeTimestamp The timestamp when the diamond was frozen last time, zero if the diamond was never frozen
-/// @param currentProposalId The serial number of proposed diamond cuts, increments when proposing a new diamond cut
-/// @param securityCouncilMembers The set of the trusted addresses that can instantly finish upgrade (diamond cut)
-/// @param securityCouncilMemberLastApprovedProposalId The mapping of the security council addresses and the last diamond cut that they approved
-/// @param securityCouncilEmergencyApprovals The number of received upgrade approvals from the security council
-struct DiamondCutStorage {
-    bytes32 proposedDiamondCutHash;
-    uint256 proposedDiamondCutTimestamp;
-    uint256 lastDiamondFreezeTimestamp;
-    uint256 currentProposalId;
-    mapping(address => bool) securityCouncilMembers;
-    mapping(address => uint256) securityCouncilMemberLastApprovedProposalId;
-    uint256 securityCouncilEmergencyApprovals;
+/// @param proposedUpgradeHash The hash of the current upgrade proposal, zero if there is no active proposal
+/// @param state Indicates whether an upgrade is initiated and if yes what type
+/// @param securityCouncil Address which has the permission to approve instant upgrades (expected to be a Gnosis multisig)
+/// @param approvedBySecurityCouncil Indicates whether the security council has approved the upgrade
+/// @param proposedUpgradeTimestamp The timestamp when the upgrade was proposed, zero if there are no active proposals
+/// @param currentProposalId The serial number of proposed upgrades, increments when proposing a new one
+struct UpgradeStorage {
+    bytes32 proposedUpgradeHash;
+    UpgradeState state;
+    address securityCouncil;
+    bool approvedBySecurityCouncil;
+    uint40 proposedUpgradeTimestamp;
+    uint40 currentProposalId;
 }
 
 /// @dev The log passed from L2
@@ -65,16 +71,17 @@ struct VerifierParams {
 /// @dev storing all storage variables for zkSync facets
 /// NOTE: It is used in a proxy, so it is possible to add new variables to the end
 /// NOTE: but NOT to modify already existing variables or change their order
+/// NOTE: DiamondCutStorage is unused, but it must remain a member of AppStorage to not have storage collision
+/// NOTE: instead UpgradeStorage is used that is appended to the end of the AppStorage struct
 struct AppStorage {
-    /// @dev Storage of variables needed for diamond cut facet
-    DiamondCutStorage diamondCutStorage;
+    /// @dev Storage of variables needed for deprecated diamond cut facet
+    uint256[7] __DEPRECATED_diamondCutStorage;
     /// @notice Address which will exercise governance over the network i.e. change validator set, conduct upgrades
     address governor;
-    /// @notice Address that governor proposed as one that will replace it
+    /// @notice Address that the governor proposed as one that will replace it
     address pendingGovernor;
     /// @notice List of permitted validators
     mapping(address => bool) validators;
-    // TODO: should be used an external library approach
     /// @dev Verifier contract. Used to verify aggregated proof for blocks
     Verifier verifier;
     /// @notice Total number of executed blocks i.e. blocks[totalBlocksExecuted] points at the latest executed block (block 0 is genesis)
@@ -102,4 +109,21 @@ struct AppStorage {
     /// @dev Indicates that the porter may be touched on L2 transactions.
     /// @dev Used as an input to zkp-circuit.
     bool zkPorterIsAvailable;
+    /// @dev The maximum number of the L2 gas that a user can request for L1 -> L2 transactions
+    /// @dev This is the maximum number of L2 gas that is available for the "body" of the transaction, i.e.
+    /// without overhead for proving the block.
+    uint256 priorityTxMaxGasLimit;
+    /// @dev Storage of variables needed for upgrade facet
+    UpgradeStorage upgrades;
+    /// @dev A mapping L2 block number => message number => flag.
+    /// @dev The L2 -> L1 log is sent for every withdrawal, so this mapping is serving as
+    /// a flag to indicate that the message was already processed.
+    /// @dev Used to indicate that eth withdrawal was already processed
+    mapping(uint256 => mapping(uint256 => bool)) isEthWithdrawalFinalized;
+    /// @dev The most recent withdrawal time and amount reset
+    uint256 lastWithdrawalLimitReset;
+    /// @dev The accumulated withdrawn amount during the withdrawal limit window
+    uint256 withdrawnAmountInWindow;
+    /// @dev A mapping user address => the total deposited amount by the user
+    mapping(address => uint256) totalDepositedAmountPerUser;
 }

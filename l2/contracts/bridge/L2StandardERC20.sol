@@ -1,15 +1,14 @@
+// SPDX-License-Identifier: MIT
+
 pragma solidity ^0.8.0;
 
-// SPDX-License-Identifier: MIT OR Apache-2.0
-
-
-
-import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/draft-ERC20PermitUpgradeable.sol";
 import "./interfaces/IL2StandardToken.sol";
 import "../ExternalDecoder.sol";
 
 /// @author Matter Labs
-contract L2StandardERC20 is ERC20Upgradeable, IL2StandardToken {
+/// @notice The ERC20 token implementation, that is used in the "default" ERC20 bridge
+contract L2StandardERC20 is ERC20PermitUpgradeable, IL2StandardToken {
     event BridgeInitialization(address indexed l1Token, string name, string symbol, uint8 decimals);
 
     /// @dev Describes whether there is a specific getter in the token.
@@ -29,10 +28,10 @@ contract L2StandardERC20 is ERC20Upgradeable, IL2StandardToken {
     /// @notice OpenZeppelin token represents `name` and `symbol` as storage variables and `decimals` as constant.
     uint8 private decimals_;
 
-    /// @dev address of the L2 bridge that is used as trustee who can mint/burn tokens.
+    /// @dev Address of the L2 bridge that is used as trustee who can mint/burn tokens
     address public override l2Bridge;
 
-    /// @dev address of the L1 token that is
+    /// @dev Address of the L1 token that can be deposited to mint this L2 token
     address public override l1Address;
 
     /// @dev Contract is expected to be used as proxy implementation.
@@ -40,7 +39,7 @@ contract L2StandardERC20 is ERC20Upgradeable, IL2StandardToken {
     constructor() initializer {}
 
     /// @notice Initializes a contract token for later use. Expected to be used in the proxy.
-    /// @dev Stores the L1 address of the bridge and set `name`/`symbol`/`decimls` getters that L1 token has.
+    /// @dev Stores the L1 address of the bridge and set `name`/`symbol`/`decimals` getters that L1 token has.
     function bridgeInitialize(address _l1Address, bytes memory _data) external initializer {
         require(l1Address == address(0), "in5"); // Is already initialized
         require(_l1Address != address(0), "in6"); // Should be non-zero address

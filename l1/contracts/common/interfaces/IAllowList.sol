@@ -1,36 +1,49 @@
+// SPDX-License-Identifier: MIT
+
 pragma solidity ^0.8.0;
-
-// SPDX-License-Identifier: MIT OR Apache-2.0
-
-
 
 interface IAllowList {
     /*//////////////////////////////////////////////////////////////
                             EVENTS
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice public access is changed
-    event UpdatePublicAccess(address indexed target, bool newStatus);
+    /// @notice Access mode of target contract is changed
+    event UpdateAccessMode(address indexed target, AccessMode previousMode, AccessMode newMode);
 
-    /// @notice permission to call is changed
+    /// @notice Permission to call is changed
     event UpdateCallPermission(address indexed caller, address indexed target, bytes4 indexed functionSig, bool status);
 
-    /// @notice pendingOwner is changed
-    /// @dev Also emitted when the new owner is accepted and in this case, `newPendingOwner` would be zero address
-    event NewPendingOwner(address indexed oldPendingOwner, address indexed newPendingOwner);
+    /// @notice Type of access to a specific contract includes three different modes
+    /// @param Closed No one has access to the contract
+    /// @param SpecialAccessOnly Any address with granted special access can interact with a contract (see `hasSpecialAccessToCall`)
+    /// @param Public Everyone can interact with a contract
+    enum AccessMode {
+        Closed,
+        SpecialAccessOnly,
+        Public
+    }
 
-    /// @notice Owner changed
-    event NewOwner(address indexed newOwner);
+    /// @dev A struct that contains withdrawal limit data of a token
+    /// @param withdrawalLimitation Whether any withdrawal limitation is placed or not
+    /// @param withdrawalFactor Percentage of allowed withdrawal. A withdrawalFactor of 10 means maximum %10 of bridge balance can be withdrawn
+    struct Withdrawal {
+        bool withdrawalLimitation;
+        uint256 withdrawalFactor;
+    }
+
+    /// @dev A struct that contains deposit limit data of a token
+    /// @param depositLimitation Whether any deposit limitation is placed or not
+    /// @param depositCap The maximum amount that can be deposited.
+    struct Deposit {
+        bool depositLimitation;
+        uint256 depositCap;
+    }
 
     /*//////////////////////////////////////////////////////////////
                             GETTERS
     //////////////////////////////////////////////////////////////*/
 
-    function pendingOwner() external view returns (address);
-
-    function owner() external view returns (address);
-
-    function isAccessPublic(address _target) external view returns (bool);
+    function getAccessMode(address _target) external view returns (AccessMode);
 
     function hasSpecialAccessToCall(
         address _caller,
@@ -44,13 +57,17 @@ interface IAllowList {
         bytes4 _functionSig
     ) external view returns (bool);
 
+    function getTokenWithdrawalLimitData(address _l1Token) external view returns (Withdrawal memory);
+
+    function getTokenDepositLimitData(address _l1Token) external view returns (Deposit memory);
+
     /*//////////////////////////////////////////////////////////////
                            ALLOW LIST LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    function setBatchPublicAccess(address[] calldata _targets, bool[] calldata _enables) external;
+    function setBatchAccessMode(address[] calldata _targets, AccessMode[] calldata _accessMode) external;
 
-    function setPublicAccess(address _target, bool _enable) external;
+    function setAccessMode(address _target, AccessMode _accessMode) external;
 
     function setBatchPermissionToCall(
         address[] calldata _callers,
@@ -66,7 +83,23 @@ interface IAllowList {
         bool _enable
     ) external;
 
-    function setPendingOwner(address _newPendingOwner) external;
+    /*//////////////////////////////////////////////////////////////
+                           WITHDRAWAL LIMIT LOGIC
+    //////////////////////////////////////////////////////////////*/
 
-    function acceptOwner() external;
+    function setWithdrawalLimit(
+        address _l1Token,
+        bool _withdrawalLimitation,
+        uint256 _withdrawalFactor
+    ) external;
+
+    /*//////////////////////////////////////////////////////////////
+                           DEPOSIT LIMIT LOGIC
+    //////////////////////////////////////////////////////////////*/
+
+    function setDepositLimit(
+        address _l1Token,
+        bool _depositLimitation,
+        uint256 _depositCap
+    ) external;
 }

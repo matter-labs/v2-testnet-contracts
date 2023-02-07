@@ -1,24 +1,21 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 
 pragma solidity ^0.8.0;
 
-import './Constants.sol';
-import './SystemContractHelper.sol';
-import './TransactionHelper.sol';
-
-import './interfaces/IAccount.sol';
+import "./interfaces/IAccount.sol";
+import "./libraries/TransactionHelper.sol";
+import "./libraries/SystemContractHelper.sol";
+import {BOOTLOADER_FORMAL_ADDRESS, NONCE_HOLDER_SYSTEM_CONTRACT, DEPLOYER_SYSTEM_CONTRACT, INonceHolder} from "./Constants.sol";
 
 /**
  * @author Matter Labs
  * @notice The default implementation of account.
  * @dev The bytecode of the contract is set by default for all addresses for which no other bytecodes are deployed.
- * @notice If the caller is not a bootloader always returns empty return data on call, just like EOA does.
+ * @notice If the caller is not a bootloader always returns empty data on call, just like EOA does.
+ * @notice If it is delegate called always returns empty data, just like EOA does.
  */
 contract DefaultAccount is IAccount {
 	using TransactionHelper for *;
-
-	/// @dev bytes4(keccak256("isValidSignature(bytes32,bytes)"))
-	bytes4 constant EIP1271_SUCCESS_RETURN_VALUE = 0x1626ba7e;
 
 	/**
 	 * @dev Simulate the behavior of the EOA if the caller is not the bootloader.
@@ -37,33 +34,52 @@ contract DefaultAccount is IAccount {
 		_;
 	}
 
-	/// @notice Validates the transaction & increments nonce. 
-	/// @dev The transaction is considered accepted by the account if 
-	/// the call to this function by the bootloader does not revert 
-	/// and the nonce has been set as used.
-	/// @param _suggestedSignedHash The suggested hash of the transaction to be signed by the user.
-	/// This is the hash that is signed by the EOA by default.
-	/// @param _transaction The transaction structure itself.
-	/// @dev Besides the params above, it also accepts unused first paramter "_txHash", which
-	/// is the unique (canonical) hash of the transaction.  
-	function validateTransaction(
-		bytes32, // _txHash
-		bytes32 _suggestedSignedHash, 
-		Transaction calldata _transaction
-	) external payable override ignoreNonBootloader {
-		_validateTransaction(_suggestedSignedHash, _transaction);
-	}
+    /**
+     * @dev Simulate the behavior of the EOA if it is called via `delegatecall`.
+     * Thus, the default account on a delegate call behaves the same as EOA on Ethereum.
+     * If all functions will use this modifier AND the contract will implement an empty payable fallback()
+     * then the contract will be indistinguishable from the EOA when called.
+     */
+    modifier ignoreInDelegateCall() {
+        address codeAddress = SystemContractHelper.getCodeAddress();
+        if (codeAddress != address(this)) {
+            // If the function was delegate called, behave like an EOA.
+            assembly {
+                return(0, 0)
+            }
+        }
+
+        // Continue execution if not delegate called.
+        _;
+    }
+
+    /// @notice Validates the transaction & increments nonce.
+    /// @dev The transaction is considered accepted by the account if
+    /// the call to this function by the bootloader does not revert
+    /// and the nonce has been set as used.
+    /// @param _suggestedSignedHash The suggested hash of the transaction to be signed by the user.
+    /// This is the hash that is signed by the EOA by default.
+    /// @param _transaction The transaction structure itself.
+    /// @dev Besides the params above, it also accepts unused first paramter "_txHash", which
+    /// is the unique (canonical) hash of the transaction.
+    function validateTransaction(
+        bytes32, // _txHash
+        bytes32 _suggestedSignedHash,
+        Transaction calldata _transaction
+    ) external payable override ignoreNonBootloader ignoreInDelegateCall returns (bytes4 magic) {
+        magic = _validateTransaction(_suggestedSignedHash, _transaction);
+    }
 
 	/// @notice Inner method for validating transaction and increasing the nonce
 	/// @param _suggestedSignedHash The hash of the transaction signed by the EOA
 	/// @param _transaction The transaction.
-	function _validateTransaction(bytes32 _suggestedSignedHash, Transaction calldata _transaction) internal {
+	function _validateTransaction(bytes32 _suggestedSignedHash, Transaction calldata _transaction) internal returns (bytes4 magic) {
 		// Note, that nonce holder can only be called with "isSystem" flag.
 		SystemContractsCaller.systemCallWithPropagatedRevert(
 			uint32(gasleft()),
 			address(NONCE_HOLDER_SYSTEM_CONTRACT),
 			0,
-			abi.encodeCall(INonceHolder.incrementMinNonceIfEquals, (_transaction.reserved[0]))
+			abi.encodeCall(INonceHolder.incrementMinNonceIfEquals, (_transaction.nonce))
 		);
 		
 		bytes32 txHash;
@@ -78,77 +94,87 @@ contract DefaultAccount is IAccount {
 			txHash = _suggestedSignedHash;
 		}
 
+        if (_transaction.to == uint256(uint160(address(DEPLOYER_SYSTEM_CONTRACT)))) {
+            require(_transaction.data.length >= 4, "Invalid call to ContractDeployer");
+        }
+
 		// The fact there is are enough balance for the account
 		// should be checked explicitly to prevent user paying for fee for a
 		// transaction that wouldn't be included on Ethereum.
 		uint256 totalRequiredBalance = _transaction.totalRequiredBalance();
 		require(totalRequiredBalance <= address(this).balance, "Not enough balance for fee + value");
 
-		require(_isValidSignature(txHash, _transaction.signature) == EIP1271_SUCCESS_RETURN_VALUE, "Invalid signature");
+        bytes memory signature = _transaction.signature;
+        bool substitutedSignature = false;
+        if (_transaction.signature.length == 0) {
+            substitutedSignature = true;
+
+            // substituting the signature with some signature-like array to make sure that the 
+            // validation step uses as much steps as the validation with the correct signature provided 
+            signature = new bytes(65);
+            signature[65] = bytes1(uint8(27));
+        }
+
+        if (_isValidSignature(txHash, _transaction.signature)) {
+            magic = ACCOUNT_VALIDATION_SUCCESS_MAGIC;
+        } else {
+            magic = bytes4(0);
+        }
 	}
 	
-	/// @notice Method called by the bootloader to execute the transaction.
-	/// @param _transaction The transaction to execute.
-	/// @dev It also accepts unused _txHash and _suggestedSignedHash parameters: 
-	/// the unique (canonical) hash of the transaction and the suggested signed 
-	/// hash of the transaction.
-	function executeTransaction(
-		bytes32, // _txHash
-		bytes32, // _suggestedSignedHash 
-		Transaction calldata _transaction
-	) external payable override ignoreNonBootloader {
-		_execute(_transaction);
-	}
+    /// @notice Method called by the bootloader to execute the transaction.
+    /// @param _transaction The transaction to execute.
+    /// @dev It also accepts unused _txHash and _suggestedSignedHash parameters:
+    /// the unique (canonical) hash of the transaction and the suggested signed
+    /// hash of the transaction.
+    function executeTransaction(
+        bytes32, // _txHash
+        bytes32, // _suggestedSignedHash
+        Transaction calldata _transaction
+    ) external payable override ignoreNonBootloader ignoreInDelegateCall {
+        _execute(_transaction);
+    }
 
-	/// @notice Method that should be used to initiate a transaction from this account 
-	/// by an external call. This is not mandatory, but should be implemented so that
-	/// it is always possible to execute transaction from L1 for this account.
-	/// @dev This method is basically validate + execute.
-	/// @param _transaction The transaction to execute.
-	function executeTransactionFromOutside(Transaction calldata _transaction) external payable override ignoreNonBootloader {
-		// The account recalculate the hash on its own
-		_validateTransaction(bytes32(0), _transaction);
-		_execute(_transaction);
-	}
+    /// @notice Method that should be used to initiate a transaction from this account
+    /// by an external call. This is not mandatory but should be implemented so that
+    /// it is always possible to execute transactions from L1 for this account.
+    /// @dev This method is basically validate + execute.
+    /// @param _transaction The transaction to execute.
+    function executeTransactionFromOutside(
+        Transaction calldata _transaction
+    ) external payable override ignoreNonBootloader ignoreInDelegateCall {
+        // The account recalculate the hash on its own
+        _validateTransaction(bytes32(0), _transaction);
+        _execute(_transaction);
+    }
 
-	/// @notice Inner method for executing a transaction.
-	/// @param _transaction The transaction to execute.
-	function _execute(Transaction calldata _transaction) internal {
-		address to = address(uint160(_transaction.to));
-		uint256 value = _transaction.reserved[1];
-		require(address(this).balance >= value, "Not enough balance to execute");
+    /// @notice Inner method for executing a transaction.
+    /// @param _transaction The transaction to execute.
+    function _execute(Transaction calldata _transaction) internal {
+        address to = address(uint160(_transaction.to));
+        uint128 value = Utils.safeCastToU128(_transaction.value);
+        bytes memory data = _transaction.data;
 
-		bytes memory data = _transaction.data;
+        if (to == address(DEPLOYER_SYSTEM_CONTRACT)) {
+            uint32 gas = Utils.safeCastToU32(gasleft());
 
-		if(to == address(DEPLOYER_SYSTEM_CONTRACT)) {
-			// Note, that the deployer contract can only be called 
-			// with a "systemCall" flag.
-			SystemContractsCaller.systemCall(
-				uint32(gasleft()),
-				to,
-				uint128(_transaction.reserved[1]), // By convention, reserved[1] is `value`
-				_transaction.data
-			);
-		} else {
-			assembly {
-				let success := call(gas(), to, value, add(data, 0x20), mload(data), 0, 0)
-
-				// The returned revertReason will be available on the server
-				// side as the revert reason of the transaction.
-				if iszero(success) {
-					let size := returndatasize()
-					returndatacopy(0, 0, size)
-					revert(0, size)
-				}
-			}
-		}
+            // Note, that the deployer contract can only be called
+            // with a "systemCall" flag.
+            SystemContractsCaller.systemCallWithPropagatedRevert(gas, to, value, data);
+        } else {
+            bool success;
+            assembly {
+                success := call(gas(), to, value, add(data, 0x20), mload(data), 0, 0)
+            }
+            require(success);
+        }
 	}
 
 	/// @notice Validation that the ECDSA signature of the transaction is correct.
 	/// @param _hash The hash of the transaction to be signed.
 	/// @param _signature The signature of the transaction.
 	/// @return EIP1271_SUCCESS_RETURN_VALUE if the signaure is correct. It reverts otherwise.
-	function _isValidSignature(bytes32 _hash, bytes memory _signature) internal view returns (bytes4) {
+	function _isValidSignature(bytes32 _hash, bytes memory _signature) internal view returns (bool) {
 		require(_signature.length == 65, 'Signature length is incorrect');
 		uint8 v;
 		bytes32 r;
@@ -164,65 +190,59 @@ contract DefaultAccount is IAccount {
 		}
 		require(v == 27 || v == 28, "v is neither 27 nor 28");
 
+		// EIP-2 still allows signature malleability for ecrecover(). Remove this possibility and make the signature
+        // unique. Appendix F in the Ethereum Yellow paper (https://ethereum.github.io/yellowpaper/paper.pdf), defines
+        // the valid range for s in (301): 0 < s < secp256k1n ÷ 2 + 1, and for v in (302): v ∈ {27, 28}. Most
+        // signatures from current libraries generate a unique signature with an s-value in the lower half order.
+        //
+        // If your library generates malleable signatures, such as s-values in the upper range, calculate a new s-value
+        // with 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141 - s1 and flip v from 27 to 28 or
+        // vice versa. If your library also generates signatures with 0/1 for v instead 27/28, add 27 to v to accept
+        // these malleable signatures as well.
+        require(uint256(s) <= 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0, "Invalid s");
+
 		address recoveredAddress = ecrecover(_hash, v, r, s);
 
-		if (recoveredAddress == address(this) && recoveredAddress != address(0)) {
-			return EIP1271_SUCCESS_RETURN_VALUE;
-		} else {
-			return 0;
-		}
+        return recoveredAddress == address(this) && recoveredAddress != address(0);
 	}
 
-	/// @notice Method for paying the bootloader for the transaction.
-	/// @param _transaction The transaction for which the fee is paid.
-	/// @dev It also accepts unused _txHash and _suggestedSignedHash parameters: 
-	/// the unique (canonical) hash of the transaction and the suggested signed 
-	/// hash of the transaction.
-	function payForTransaction(
-		bytes32, // _txHash
-		bytes32, // _suggestedSignedHash
-		Transaction calldata _transaction
-	) external payable ignoreNonBootloader {
-		bool success = _transaction.payToTheBootloader();
-		require(success, "Failed to pay the fee to the operator");
-	}
+    /// @notice Method for paying the bootloader for the transaction.
+    /// @param _transaction The transaction for which the fee is paid.
+    /// @dev It also accepts unused _txHash and _suggestedSignedHash parameters:
+    /// the unique (canonical) hash of the transaction and the suggested signed
+    /// hash of the transaction.
+    function payForTransaction(
+        bytes32, // _txHash
+        bytes32, // _suggestedSignedHash
+        Transaction calldata _transaction
+    ) external payable ignoreNonBootloader ignoreInDelegateCall {
+        bool success = _transaction.payToTheBootloader();
+        require(success, "Failed to pay the fee to the operator");
+    }
 
+    /// @notice Method, where the user should prepare for the transaction to be
+    /// paid for by a paymaster.
+    /// @dev Here, the account should set the allowance for the smart contracts
+    /// @param _transaction The transaction.
+    /// @dev It also accepts unused _txHash and _suggestedSignedHash parameters:
+    /// the unique (canonical) hash of the transaction and the suggested signed
+    /// hash of the transaction.
+    function prepareForPaymaster(
+        bytes32, // _txHash
+        bytes32, // _suggestedSignedHash
+        Transaction calldata _transaction
+    ) external payable ignoreNonBootloader ignoreInDelegateCall {
+        _transaction.processPaymasterInput();
+    }
 
-	/// @notice Method, where the user should prepare for the transaction to be
-	/// paid for by a paymaster. 
-	/// @dev Here, the account should set the allowance for the smart contracts
-	/// @param _transaction The transaction.
-	/// @dev It also accepts unused _txHash and _suggestedSignedHash parameters: 
-	/// the unique (canonical) hash of the transaction and the suggested signed 
-	/// hash of the transaction.
-	function prePaymaster(
-		bytes32, // _txHash
-		bytes32, // _suggestedSignedHash
-		Transaction calldata _transaction
-	) external payable ignoreNonBootloader {
-		_transaction.processPaymasterInput();
-	}
- 
+    fallback() external {
+        // fallback of default account shouldn't be called by bootloader under no circumstances
+        assert(msg.sender != BOOTLOADER_FORMAL_ADDRESS);
 
-	fallback() external {
-		// fallback of default account shouldn't be called by bootloader under no circumstances 
-		assert(msg.sender != BOOTLOADER_FORMAL_ADDRESS);		
-		
-		// If the contract is called directly, behave like an EOA
-	}
+        // If the contract is called directly, behave like an EOA
+    }
 
-	receive() external payable {
-		// We allow bootloader calling this contract with zero calldata,
-		// since this transaction may be used by the bootloader to 
-		// transfer the fee to the operator. 
-		if (msg.sender == BOOTLOADER_FORMAL_ADDRESS) {
-			uint256 calldataSize;
-			assembly {
-				calldataSize := calldatasize()
-			}
-			require(calldataSize == 0, "Bootloader should only `receive` with no calldata");
-		}
-		
-		// If the contract is called directly, behave like an EOA
-	}
+    receive() external payable {
+        // If the contract is called directly, behave like an EOA
+    }
 }

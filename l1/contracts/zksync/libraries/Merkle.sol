@@ -1,11 +1,13 @@
+// SPDX-License-Identifier: MIT
+
 pragma solidity ^0.8.0;
 
-// SPDX-License-Identifier: MIT OR Apache-2.0
-
-
+import "../../common/libraries/UncheckedMath.sol";
 
 /// @author Matter Labs
 library Merkle {
+    using UncheckedMath for uint256;
+
     /// @dev Calculate Merkle root by the provided Merkle proof.
     /// NOTE: When using this function, check that the _path length is equal to the tree height to prevent shorter/longer paths attack
     /// @param _path Merkle path from the leaf to the root
@@ -20,22 +22,25 @@ library Merkle {
         uint256 pathLength = _path.length;
         require(pathLength > 0, "xc");
         require(pathLength < 256, "bt");
-        require(_index < 2**pathLength, "pz");
+        require(_index < (1 << pathLength), "pz");
 
         bytes32 currentHash = _itemHash;
-        for (uint256 i = 0; i < pathLength; ) {
-            if (_index % 2 == 0) {
-                currentHash = keccak256(abi.encodePacked(currentHash, _path[i]));
-            } else {
-                currentHash = keccak256(abi.encodePacked(_path[i], currentHash));
-            }
+        for (uint256 i; i < pathLength; i = i.uncheckedInc()) {
+            currentHash = (_index % 2 == 0)
+                ? _efficientHash(currentHash, _path[i])
+                : _efficientHash(_path[i], currentHash);
             _index /= 2;
-
-            unchecked {
-                ++i;
-            }
         }
 
         return currentHash;
+    }
+
+    /// @dev Keccak hash of the concatenation of two 32-byte words
+    function _efficientHash(bytes32 _lhs, bytes32 _rhs) private pure returns (bytes32 result) {
+        assembly {
+            mstore(0x00, _lhs)
+            mstore(0x20, _rhs)
+            result := keccak256(0x00, 0x40)
+        }
     }
 }

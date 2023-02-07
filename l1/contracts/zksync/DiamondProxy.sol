@@ -1,12 +1,10 @@
+// SPDX-License-Identifier: MIT
+
 pragma solidity ^0.8.0;
-
-// SPDX-License-Identifier: MIT OR Apache-2.0
-
-
 
 import "./libraries/Diamond.sol";
 
-/// @title Diamond Proxy Cotract (EIP-2535)
+/// @title Diamond Proxy Contract (EIP-2535)
 /// @author Matter Labs
 contract DiamondProxy {
     constructor(uint256 _chainId, Diamond.DiamondCutData memory _diamondCut) {

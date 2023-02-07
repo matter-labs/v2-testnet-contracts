@@ -1,9 +1,11 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 
 pragma solidity ^0.8.0;
 
-import "../TransactionHelper.sol";
+import "../libraries/TransactionHelper.sol";
 
 interface IBootloaderUtilities {
-    function getTransactionHash(Transaction calldata _transaction) external view returns (bytes32);
+    function getTransactionHashes(
+        Transaction calldata _transaction
+    ) external view returns (bytes32 txHash, bytes32 signedTxHash);
 }

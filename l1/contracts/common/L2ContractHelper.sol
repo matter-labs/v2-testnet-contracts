@@ -1,8 +1,6 @@
+// SPDX-License-Identifier: MIT
+
 pragma solidity ^0.8.0;
-
-// SPDX-License-Identifier: MIT OR Apache-2.0
-
-
 
 interface IL2Messenger {
     function sendToL1(bytes memory _message) external returns (bytes32);
@@ -12,6 +10,7 @@ interface IContractDeployer {
     struct ForceDeployment {
         bytes32 bytecodeHash;
         address newAddress;
+        bool callConstructor;
         uint256 value;
         bytes input;
     }
@@ -36,8 +35,6 @@ address constant DEPLOYER_SYSTEM_CONTRACT_ADDRESS = address(SYSTEM_CONTRACTS_OFF
 address constant FORCE_DEPLOYER = address(SYSTEM_CONTRACTS_OFFSET + 0x07);
 
 IL2Messenger constant L2_MESSENGER = IL2Messenger(address(SYSTEM_CONTRACTS_OFFSET + 0x08));
-
-address constant VALUE_SIMULATOR_SYSTEM_CONTRACT_ADDRESS = address(SYSTEM_CONTRACTS_OFFSET + 0x09);
 
 library L2ContractHelper {
     bytes32 constant CREATE2_PREFIX = keccak256("zksyncCreate2");

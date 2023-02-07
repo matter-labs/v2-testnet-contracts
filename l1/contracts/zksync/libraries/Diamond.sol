@@ -1,12 +1,16 @@
-pragma solidity ^0.8.0;
-
 // SPDX-License-Identifier: MIT
 
+pragma solidity ^0.8.0;
 
+import "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import "../../common/libraries/UncheckedMath.sol";
 
 /// @author Matter Labs
 /// @notice The helper library for managing the EIP-2535 diamond proxy.
 library Diamond {
+    using UncheckedMath for uint256;
+    using SafeCast for uint256;
+
     /// @dev Magic value that should be returned by diamond cut initialize contracts.
     /// @dev Used to distinguish calls to contracts that were supposed to be used as diamond initializer from other contracts.
     bytes32 constant DIAMOND_INIT_SUCCESS_RETURN_VALUE =
@@ -62,16 +66,15 @@ library Diamond {
 
     /// @dev Structure of the diamond proxy changes
     /// @param facetCuts The set of changes (adding/removing/replacement) of implementation contracts
-    /// @param initAddress The address that's dellegate called after setting up new facet changes
-    /// @param initCalldata Calldata for the delegete call to `initAddress`
+    /// @param initAddress The address that's delegate called after setting up new facet changes
+    /// @param initCalldata Calldata for the delegate call to `initAddress`
     struct DiamondCutData {
         FacetCut[] facetCuts;
         address initAddress;
         bytes initCalldata;
     }
 
-    /// @dev Add/replace/remove any number of selectors and optionally execute a function with delegatecall
-    /// @param _diamondCut Diamond's facet changes and the parameters to optional initialization delegatecall
+    /// @dev Type of change over diamond: add/replace/remove facets
     enum Action {
         Add,
         Replace,
@@ -93,7 +96,7 @@ library Diamond {
         address initAddress = _diamondCut.initAddress;
         bytes memory initCalldata = _diamondCut.initCalldata;
         uint256 facetCutsLength = facetCuts.length;
-        for (uint256 i = 0; i < facetCutsLength; ++i) {
+        for (uint256 i = 0; i < facetCutsLength; i = i.uncheckedInc()) {
             Action action = facetCuts[i].action;
             address facet = facetCuts[i].facet;
             bool isFacetFreezable = facetCuts[i].isFreezable;
@@ -131,7 +134,7 @@ library Diamond {
         _saveFacetIfNew(_facet);
 
         uint256 selectorsLength = _selectors.length;
-        for (uint256 i = 0; i < selectorsLength; ++i) {
+        for (uint256 i = 0; i < selectorsLength; i = i.uncheckedInc()) {
             bytes4 selector = _selectors[i];
             SelectorToFacet memory oldFacet = ds.selectorToFacet[selector];
             require(oldFacet.facetAddress == address(0), "J"); // facet for this selector already exists
@@ -152,7 +155,7 @@ library Diamond {
         require(_facet != address(0), "K"); // cannot replace facet with zero address
 
         uint256 selectorsLength = _selectors.length;
-        for (uint256 i = 0; i < selectorsLength; ++i) {
+        for (uint256 i = 0; i < selectorsLength; i = i.uncheckedInc()) {
             bytes4 selector = _selectors[i];
             SelectorToFacet memory oldFacet = ds.selectorToFacet[selector];
             require(oldFacet.facetAddress != address(0), "L"); // it is impossible to replace the facet with zero address
@@ -172,7 +175,7 @@ library Diamond {
         require(_facet == address(0), "a1"); // facet address must be zero
 
         uint256 selectorsLength = _selectors.length;
-        for (uint256 i = 0; i < selectorsLength; ++i) {
+        for (uint256 i = 0; i < selectorsLength; i = i.uncheckedInc()) {
             bytes4 selector = _selectors[i];
             SelectorToFacet memory oldFacet = ds.selectorToFacet[selector];
             require(oldFacet.facetAddress != address(0), "a2"); // Can't delete a non-existent facet
@@ -189,7 +192,7 @@ library Diamond {
         uint256 selectorsLength = ds.facetToSelectors[_facet].selectors.length;
         // If there are no selectors associated with facet then save facet as new one
         if (selectorsLength == 0) {
-            ds.facetToSelectors[_facet].facetPosition = uint16(ds.facets.length);
+            ds.facetToSelectors[_facet].facetPosition = ds.facets.length.toUint16();
             ds.facets.push(_facet);
         }
     }
@@ -206,7 +209,7 @@ library Diamond {
     ) private {
         DiamondStorage storage ds = getDiamondStorage();
 
-        uint16 selectorPosition = uint16(ds.facetToSelectors[_facet].selectors.length);
+        uint16 selectorPosition = (ds.facetToSelectors[_facet].selectors.length).toUint16();
 
         // if selectorPosition is nonzero, it means it is not a new facet
         // so the freezability of the first selector must be matched to _isSelectorFreezable
@@ -238,7 +241,7 @@ library Diamond {
             bytes4 lastSelector = ds.facetToSelectors[_facet].selectors[lastSelectorPosition];
 
             ds.facetToSelectors[_facet].selectors[selectorPosition] = lastSelector;
-            ds.selectorToFacet[lastSelector].selectorPosition = uint16(selectorPosition);
+            ds.selectorToFacet[lastSelector].selectorPosition = selectorPosition.toUint16();
         }
 
         // Remove last element from the selectors array
@@ -254,7 +257,7 @@ library Diamond {
     }
 
     /// @dev remove facet from the list of known facets
-    /// NOTE: It is expected but NOT enforced that there are no selectors associated wih `_facet`
+    /// NOTE: It is expected but NOT enforced that there are no selectors associated with `_facet`
     function _removeFacet(address _facet) private {
         DiamondStorage storage ds = getDiamondStorage();
 
@@ -267,7 +270,7 @@ library Diamond {
             address lastFacet = ds.facets[lastFacetPosition];
 
             ds.facets[facetPosition] = lastFacet;
-            ds.facetToSelectors[lastFacet].facetPosition = uint16(facetPosition);
+            ds.facetToSelectors[lastFacet].facetPosition = facetPosition.toUint16();
         }
 
         // Remove last element from the facets array

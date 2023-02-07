@@ -1,8 +1,6 @@
+// SPDX-License-Identifier: MIT
+
 pragma solidity ^0.8.0;
-
-// SPDX-License-Identifier: MIT OR Apache-2.0
-
-
 
 import {IMailbox, L2Log, L2Message} from "../../zksync/interfaces/IZkSync.sol";
 
@@ -19,7 +17,9 @@ interface IL1Bridge {
     function deposit(
         address _l2Receiver,
         address _l1Token,
-        uint256 _amount
+        uint256 _amount,
+        uint256 _l2TxGasLimit,
+        uint256 _l2TxGasPerPubdataByte
     ) external payable returns (bytes32 txHash);
 
     function claimFailedDeposit(

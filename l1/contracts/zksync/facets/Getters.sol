@@ -1,17 +1,17 @@
+// SPDX-License-Identifier: MIT
+
 pragma solidity ^0.8.0;
-
-// SPDX-License-Identifier: MIT OR Apache-2.0
-
-
 
 import "./Base.sol";
 import "../libraries/Diamond.sol";
 import "../libraries/PriorityQueue.sol";
+import "../../common/libraries/UncheckedMath.sol";
 import "../interfaces/IGetters.sol";
 
 /// @title Getters Contract implements functions for getting contract state from outside the blockchain.
 /// @author Matter Labs
 contract GettersFacet is Base, IGetters {
+    using UncheckedMath for uint256;
     using PriorityQueue for PriorityQueue.Queue;
 
     /*//////////////////////////////////////////////////////////////
@@ -87,40 +87,49 @@ contract GettersFacet is Base, IGetters {
         return s.storedBlockHashes[_blockNumber];
     }
 
-    /// @return The hash of the diamond cut if there is an active upgrade and zero otherwise
-    function getProposedDiamondCutHash() external view returns (bytes32) {
-        return s.diamondCutStorage.proposedDiamondCutHash;
+    /// @return Bytecode hash of bootloader program.
+    function getL2BootloaderBytecodeHash() external view returns (bytes32) {
+        return s.l2BootloaderBytecodeHash;
     }
 
-    /// @return The timestamp when the diamond cut was proposed, zero if there are no active proposals
-    function getProposedDiamondCutTimestamp() external view returns (uint256) {
-        return s.diamondCutStorage.proposedDiamondCutTimestamp;
+    /// @return Bytecode hash of default account (bytecode for EOA).
+    function getL2DefaultAccountBytecodeHash() external view returns (bytes32) {
+        return s.l2DefaultAccountBytecodeHash;
     }
 
-    /// @return The timestamp when the diamond was frozen last time, zero if the diamond was never frozen
-    function getLastDiamondFreezeTimestamp() external view returns (uint256) {
-        return s.diamondCutStorage.lastDiamondFreezeTimestamp;
+    /// @return Verifier parameters.
+    function getVerifierParams() external view returns (VerifierParams memory) {
+        return s.verifierParams;
     }
 
-    /// @return The serial number of proposed diamond cuts, increments when proposing a new diamond cut
+    /// @return The address of the security council multisig
+    function getSecurityCouncil() external view returns (address) {
+        return s.upgrades.securityCouncil;
+    }
+
+    /// @return Current upgrade proposal state
+    function getUpgradeProposalState() external view returns (UpgradeState) {
+        return s.upgrades.state;
+    }
+
+    /// @return The upgrade proposal hash if there is an active one and zero otherwise
+    function getProposedUpgradeHash() external view returns (bytes32) {
+        return s.upgrades.proposedUpgradeHash;
+    }
+
+    /// @return The timestamp when the upgrade was proposed, zero if there are no active proposals
+    function getProposedUpgradeTimestamp() external view returns (uint256) {
+        return s.upgrades.proposedUpgradeTimestamp;
+    }
+
+    /// @return The serial number of a proposed upgrade, increments when proposing a new one
     function getCurrentProposalId() external view returns (uint256) {
-        return s.diamondCutStorage.currentProposalId;
+        return s.upgrades.currentProposalId;
     }
 
     /// @return The number of received upgrade approvals from the security council
-    function getSecurityCouncilEmergencyApprovals() external view returns (uint256) {
-        return s.diamondCutStorage.securityCouncilEmergencyApprovals;
-    }
-
-    /// @return Whether the address is a member of security council
-    function isSecurityCouncilMember(address _address) external view returns (bool) {
-        return s.diamondCutStorage.securityCouncilMembers[_address];
-    }
-
-    /// @notice Returns zero for not security council members
-    /// @return The index of the last diamond cut that security member approved
-    function getSecurityCouncilMemberLastApprovedProposalId(address _address) external view returns (uint256) {
-        return s.diamondCutStorage.securityCouncilMemberLastApprovedProposalId[_address];
+    function isApprovedBySecurityCouncil() external view returns (bool) {
+        return s.upgrades.approvedBySecurityCouncil;
     }
 
     /// @return Whether the diamond is frozen or not
@@ -142,11 +151,23 @@ contract GettersFacet is Base, IGetters {
         }
     }
 
+    /// @return The maximum number of L2 gas that a user can request for L1 -> L2 transactions
+    function getpriorityTxMaxGasLimit() external view returns (uint256) {
+        return s.priorityTxMaxGasLimit;
+    }
+
     /// @return Whether the selector can be frozen by the governor or always accessible
     function isFunctionFreezable(bytes4 _selector) external view returns (bool) {
         Diamond.DiamondStorage storage ds = Diamond.getDiamondStorage();
         require(ds.selectorToFacet[_selector].facetAddress != address(0), "g2");
         return ds.selectorToFacet[_selector].isFreezable;
+    }
+
+    /// @return Whether a withdrawal has been finalized.
+    /// @param _l2BlockNumber The L2 block number within which the withdrawal happened.
+    /// @param _l2MessageIndex The index of the L2->L1 message denoting the withdrawal.
+    function isEthWithdrawalFinalized(uint256 _l2BlockNumber, uint256 _l2MessageIndex) external view returns (bool) {
+        return s.isEthWithdrawalFinalized[_l2BlockNumber][_l2MessageIndex];
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -160,7 +181,7 @@ contract GettersFacet is Base, IGetters {
         uint256 facetsLen = ds.facets.length;
         result = new Facet[](facetsLen);
 
-        for (uint256 i = 0; i < facetsLen; ++i) {
+        for (uint256 i = 0; i < facetsLen; i = i.uncheckedInc()) {
             address facetAddr = ds.facets[i];
             Diamond.FacetToSelectors memory facetToSelectors = ds.facetToSelectors[facetAddr];
 
