@@ -247,29 +247,12 @@ contract ExecutorFacet is Base, IExecutor {
         }
         require(currentTotalBlocksVerified <= s.totalBlocksCommitted, "q");
 
-        // #if DUMMY_VERIFIER
-
-        // Additional level of protection for the mainnet
-        assert(block.chainid != 1);
-        // We allow skipping the zkp verification for the test(net) environment
-        // If the proof is not empty, verify it, otherwise, skip the verification
-        if (_proof.serializedProof.length > 0) {
-            // TODO: We keep the code duplication here to NOT to invalidate the audit, refactor it before the next audit. (SMA-1631)
-            bool successVerifyProof = s.verifier.verify_serialized_proof(proofPublicInput, _proof.serializedProof);
-            require(successVerifyProof, "p"); // Proof verification fail
-
-            // Verify the recursive part that was given to us through the public input
-            bool successProofAggregation = _verifyRecursivePartOfProof(_proof.recursiveAggregationInput);
-            require(successProofAggregation, "hh"); // Proof aggregation must be valid
-        }
-        // #else
         bool successVerifyProof = s.verifier.verify_serialized_proof(proofPublicInput, _proof.serializedProof);
         require(successVerifyProof, "p"); // Proof verification fail
 
         // Verify the recursive part that was given to us through the public input
         bool successProofAggregation = _verifyRecursivePartOfProof(_proof.recursiveAggregationInput);
         require(successProofAggregation, "hh"); // Proof aggregation must be valid
-        // #endif
 
         emit BlocksVerification(s.totalBlocksVerified, currentTotalBlocksVerified);
         s.totalBlocksVerified = currentTotalBlocksVerified;
