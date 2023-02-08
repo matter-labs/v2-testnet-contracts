@@ -1,8 +1,6 @@
+// SPDX-License-Identifier: MIT
+
 pragma solidity ^0.8.0;
-
-// SPDX-License-Identifier: MIT OR Apache-2.0
-
-
 
 interface IL2Messenger {
     function sendToL1(bytes memory _message) external returns (bytes32);
@@ -19,7 +17,7 @@ interface IContractDeployer {
 uint160 constant SYSTEM_CONTRACTS_OFFSET = 0x8000; // 2^15
 
 address constant BOOTLOADER_ADDRESS = address(SYSTEM_CONTRACTS_OFFSET + 0x01);
-address constant VALUE_SIMULATOR_SYSTEM_CONTRACT_ADDRESS = address(SYSTEM_CONTRACTS_OFFSET + 0x09);
+
 IL2Messenger constant L2_MESSENGER = IL2Messenger(address(SYSTEM_CONTRACTS_OFFSET + 0x08));
 
 library L2ContractHelper {
@@ -48,11 +46,13 @@ struct Transaction {
     uint256 txType;
     uint256 from;
     uint256 to;
-    uint256 ergsLimit;
-    uint256 ergsPerPubdataByteLimit;
-    uint256 maxFeePerErg;
-    uint256 maxPriorityFeePerErg;
+    uint256 gasLimit;
+    uint256 gasPerPubdataByteLimit;
+    uint256 maxFeePerGas;
+    uint256 maxPriorityFeePerGas;
     uint256 paymaster;
+    uint256 nonce;
+    uint256 value;
     // In the future, we might want to add some
     // new fields to the struct. The `txData` struct
     // is to be passed to account and any changes to its structure
@@ -61,7 +61,7 @@ struct Transaction {
     // It is also recommneded that their length is fixed, since
     // it would allow easier proof integration (in case we will need
     // some special circuit for preprocessing transactions).
-    uint256[6] reserved;
+    uint256[4] reserved;
     bytes data;
     bytes signature;
     bytes32[] factoryDeps;

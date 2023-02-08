@@ -1,332 +1,136 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8;
+pragma solidity ^0.8.0;
 
-import { MAX_SYSTEM_CONTRACT_ADDRESS, MSG_VALUE_SIMULATOR_IS_SYSTEM_BIT, MSG_VALUE_SYSTEM_CONTRACT } from "./Constants.sol";
-
-import "./SystemContractsCaller.sol";
-import "./Utils.sol";
-
-struct ZkSyncMeta {
-    uint32 ergsPerPubdataByte;
-    uint32 heapSize;
-    uint32 auxHeapSize;
-    uint8 shardId;
-    uint8 callerShardId;
-    uint8 codeShardId;
-}
-
-enum Global {
-    CalldataPtr,
-    CallFlags,
-    ExtraABIData1,
-    ExtraABIData2,
-    ReturndataPtr
-}
+import {ISystemContext} from "./interfaces/ISystemContext.sol";
+import {SystemContractHelper} from "./libraries/SystemContractHelper.sol";
+import {BOOTLOADER_FORMAL_ADDRESS} from "./Constants.sol";
 
 /**
  * @author Matter Labs
- * @notice Library used for accessing zkEVM-specific opcodes, needed for the development
- * of system contracts.
- * @dev While this library will be eventually available to public, some of the provided
- * methods won't work for non-system contracts. We will not recommend this library
- * for external use.
+ * @notice Contract that stores some of the context variables, that may be either
+ * block-scoped, tx-scoped or system-wide.
  */
-library SystemContractHelper {
-    /// @notice Send an L2Log to L1.
-    /// @param _isService The `isService` flag. 
-    /// @param _key The `key` part of the L2Log.
-    /// @param _value The `value` part of the L2Log.
-    /// @dev The meaning of all these parameters is context-dependent, but they 
-    /// have no intrinsic meaning per se.
-    function toL1(
-        bool _isService,
-        bytes32 _key,
-        bytes32 _value
-    ) internal {
-        address callAddr = TO_L1_CALL_ADDRESS;
-        assembly {
-            // This `success` is always 0, but the method always always succeeds
-            // (except for the cases when there is not enough gas) 
-            let success := call(_isService, callAddr, _key, _value, 0xFFFF, 0, 0)
-        }
-    }
-    
-    /// @notice Get address of the currently executed code.
-    /// @dev This allows to differentiate between `call` and `delegatecall`.
-    /// During the former `this` and `codeAddress` are the same, while
-    /// during the latter they are not.
-    function getCodeAddress() internal view returns (address addr) {
-        address callAddr = CODE_ADDRESS_CALL_ADDRESS;
-        assembly {
-            addr := staticcall(0, callAddr, 0, 0xFFFF, 0, 0)
-        }
-    }
-
-    /// @notice packs precompile parameters into one word
-    /// @param _inputMemoryOffset The memory offset in 32-byte words for the input data for calling the precompile.
-    /// @param _inputMemoryLength The length of the input data in words.
-    /// @param _outputMemoryOffset The memory offset in 32-byte words for the output data.
-    /// @param _outputMemoryLength The length of the output data in words.
-    /// @param _perPrecompileInterpreted The constant, the meaning of which is defined separately for 
-    /// each precompile. For information, please read the documentation of the precompilecall log in 
-    /// the VM.
-    function packPrecompileParams(
-        uint32 _inputMemoryOffset,
-        uint32 _inputMemoryLength,
-        uint32 _outputMemoryOffset,
-        uint32 _outputMemoryLength,
-        uint64 _perPrecompileInterpreted
-    ) internal pure returns (uint256 rawParams) {
-        rawParams = _inputMemoryOffset;
-        rawParams |= uint256(_inputMemoryLength) << 32;
-        rawParams |= uint256(_outputMemoryOffset) << 64;
-        rawParams |= uint256(_outputMemoryLength) << 96;
-        rawParams |= uint256(_perPrecompileInterpreted) << 192;
-    }
-
-    /// @notice Call precompile with given parameters.
-    /// @param _rawParams The packed precompile params. They can be retrieved by 
-    /// the `packPrecompileParams` method.
-    /// @param _ergsToBurn The number of ergs to burn during this call.
-    /// @return success Whether the call was successful.
-    /// @dev The list of currently available precompiles sha256, keccak256, ecrecover.
-    /// NOTE: The precompile type depends on `this` which calls precompile, which means that only
-    /// system contracts corresponding to the list of precompiles above can do `precompileCall`.
-    /// @dev If used not in the `sha256`, `keccak256` or `ecrecover` contracts, it will just burn the ergs provided.
-    function precompileCall(uint256 _rawParams, uint32 _ergsToBurn) internal view returns (bool success) {
-		address callAddr = PRECOMPILE_CALL_ADDRESS;
-
-		// After `precompileCall` ergs will be burned down to 0 if there are not enough of them,
-		// thats why it should be checked before the call.
-		require(gasleft() >= _ergsToBurn);
-		assembly {
-			success := staticcall(_rawParams, callAddr, _ergsToBurn, 0xFFFF, 0, 0)
-		}
-	}
-
-    /// @notice Set `msg.value` to next far call.
-    /// @param _value The msg.value that will be used for the *next* call.
-    /// @dev If called not in kernel mode, it will result in a revert (enforced by the VM) 
-    function setValueForNextFarCall(uint128 _value) internal returns (bool success) {
-        address callAddr = SET_CONTEXT_VALUE_CALL_ADDRESS;
-        assembly {
-            success := call(0, callAddr, _value, 0, 0xFFFF, 0, 0)
-        }
-    }
-
-    /// @notice Perform a `mimicCall`, i.e. a call with custom msg.sender.
-    /// @param to The address to call
-    /// @param whoToMimic The `msg.sender` for the next call.
-    /// @param data The calldata 
-    /// @param isConstructor Whether the call should contain the `isConstructor` flag.
-    /// @param isSystem Whether the call should contain the `isSystem` flag.
-    /// @return The returndata if the call was successful. Reverts otherwise. 
-    /// @dev If called not in kernel mode, it will result in a revert (enforced by the VM)
-    function mimicCall(
-        address to,
-        address whoToMimic,
-        bytes memory data,
-        bool isConstructor,
-        bool isSystem
-    ) internal returns (bytes memory) {
-        address callAddr = MIMIC_CALL_CALL_ADDRESS;
-
-        uint32 dataStart;
-        assembly {
-            dataStart := add(data, 0x20)
-        }
-        uint32 dataLength = uint32(Utils.safeCastToU24(data.length));
-
-        uint256 farCallAbi = SystemContractsCaller.getFarCallABI(
-            0,
-            0,
-            dataStart,
-            dataLength,
-            uint32(gasleft()),
-            // Only rollup is supported for now
-            0,
-            CalldataForwardingMode.UseHeap,
-            isConstructor,
-            isSystem
-        );
-
-        uint size = 0;
-        assembly {
-            let success := call(to, callAddr, 0, farCallAbi, whoToMimic, 0, 0)
-            size := returndatasize()
-            if eq(success, 0) {
-                returndatacopy(0, 0, size)
-                revert(0, size)
-            }
-        }
-
-        bytes memory returnData = new bytes(size);
-        assembly {
-            mstore(returnData, size)
-            returndatacopy(add(returnData, 0x20), 0, size)
-        }
-        return returnData;
-    }
-
-    /// @notice Get the packed representation of the `ZkSyncMeta` from the current context.
-    /// @return meta The packed representation of the ZkSyncMeta.
-    /// @dev The fields in ZkSyncMeta are NOT tightly packed, i.e. there is a special rule on how 
-    /// they are packed. For more information, please read the documentation on ZkSyncMeta.
-    function getZkSyncMetaBytes() internal view returns (uint256 meta) {
-        address callAddr = META_CALL_ADDRESS;
-        assembly {
-            meta := staticcall(0, callAddr, 0, 0xFFFF, 0, 0)
-        }
-    }
-
-    /// @notice Returns the bits [offset..offset+size-1] of the meta.
-    /// @param meta Packed representation of the ZkSyncMeta.
-    /// @param offset The offset of the bits.
-    /// @param size The size of the extracted number in bits.
-    /// @return result The extracted number.
-    function extractNumberFromMeta(uint256 meta, uint256 offset, uint256 size) internal pure returns (uint256 result) {
-        // Firstly, we delete all the bits after the field
-        uint256 shifted = (meta << (256 - size - offset)); 
-        // Then we shift everything back
-        result = (shifted >> (256 - size));
-    }
-
-    /// @notice Given the packed representation of `ZkSyncMeta`, retrieves the number of ergs
-    /// that a single byte sent to L1 as pubdata costs. 
-    /// @param meta Packed representation of the ZkSyncMeta.
-    /// @return ergsPerPubdataByte The current price in ergs per pubdata byte.
-    function getErgsPerPubdataByteFromMeta(uint256 meta) internal pure returns (uint32 ergsPerPubdataByte)  {
-        ergsPerPubdataByte = uint32(extractNumberFromMeta(meta, META_ERGS_PER_PUBDATA_BYTE_OFFSET, 32));
-    }
-
-    /// @notice Given the packed representation of `ZkSyncMeta`, retrieves the number of the current size
-    /// of the heap in bytes.
-    /// @param meta Packed representation of the ZkSyncMeta.
-    /// @return heapSize The size of the memory in bytes byte.
-    /// @dev The following expression: getHeapSizeFromMeta(getZkSyncMetaBytes()) is
-    /// equivalent to the MSIZE in Solidity.
-    function getHeapSizeFromMeta(uint256 meta) internal pure returns (uint32 heapSize) {
-        heapSize = uint32(extractNumberFromMeta(meta, META_HEAP_SIZE_OFFSET, 32));
-    }
-
-    /// @notice Given the packed representation of `ZkSyncMeta`, retrieves the number of the current size
-    /// of the auxilary heap in bytes.
-    /// @param meta Packed representation of the ZkSyncMeta.
-    /// @return auxHeapSize The size of the auxilary memory in bytes byte.
-    /// @dev You can read more on auxilary memory in the VM1.2 documentation.
-    function getAuxHeapSizeFromMeta(uint256 meta) internal pure returns (uint32 auxHeapSize) {
-        auxHeapSize = uint32(extractNumberFromMeta(meta, META_AUX_HEAP_SIZE_OFFSET, 32));
-    }
- 
-    /// @notice Given the packed representation of `ZkSyncMeta`, retrieves the shardId of `this`.
-    /// @param meta Packed representation of the ZkSyncMeta.
-    /// @return shardId The shardId of `this`.
-    /// @dev Currently only shard 0 (zkRollup) is supported.
-    function getShardIdFromMeta(uint256 meta) internal pure returns (uint8 shardId)  {
-        shardId = uint8(extractNumberFromMeta(meta, META_SHARD_ID_OFFSET, 8));
-    }
-
-    /// @notice Given the packed representation of `ZkSyncMeta`, retrieves the shardId of 
-    /// the msg.sender. 
-    /// @param meta Packed representation of the ZkSyncMeta.
-    /// @return callerShardId The shardId of the msg.sender.
-    /// @dev Currently only shard 0 (zkRollup) is supported.
-    function getCallerShardIdFromMeta(uint256 meta) internal pure returns (uint8 callerShardId)  {
-        callerShardId = uint8(extractNumberFromMeta(meta, META_CALLER_SHARD_ID_OFFSET, 8));
-    }
-
-    /// @notice Given the packed representation of `ZkSyncMeta`, retrieves the shardId of 
-    /// the currently executed code. 
-    /// @param meta Packed representation of the ZkSyncMeta.
-    /// @return codeShardId The shardId of the currently executed code.
-    /// @dev Currently only shard 0 (zkRollup) is supported.
-    function getCodeShardIdFromMeta(uint256 meta) internal pure returns (uint8 codeShardId)  {
-        codeShardId = uint8(extractNumberFromMeta(meta, META_CODE_SHARD_ID_OFFSET, 8));
-    }
-
-    /// @notice Retrieves the ZkSyncMeta structure.
-    /// @return meta The ZkSyncMeta execution context parameters.
-    function getZkSyncMeta() internal view returns (ZkSyncMeta memory meta) {
-        uint256 metaPacked = getZkSyncMetaBytes();
-        meta.ergsPerPubdataByte = getErgsPerPubdataByteFromMeta(metaPacked);
-        meta.shardId = getShardIdFromMeta(metaPacked);
-        meta.callerShardId = getCallerShardIdFromMeta(metaPacked);
-        meta.codeShardId = getCodeShardIdFromMeta(metaPacked);
-    }
-
-    /// @notice Returns the call flags for the current call.
-    /// @return callFlags The bitmask of the callflags. 
-    /// @dev Call flags is the value of the first register
-    /// at the start of the call.
-    /// @dev The zero bit of the callFlags indicates whether the call is 
-    /// a constructor call. The first bit of the callFlags indicates whether
-    /// the call is a system one.
-    function getCallFlags() internal view returns (uint256 callFlags) {
-        address callAddr = CALLFLAGS_CALL_ADDRESS;
-        assembly {
-            callFlags := staticcall(0, callAddr, 0, 0xFFFF, 0, 0)
-        }
-    }
-    
-    /// @notice Returns the current calldata pointer.
-    /// @return ptr The current calldata pointer.
-    /// @dev NOTE: This file is just an integer and it can not be used
-    /// to forward the calldata to the next calls in any way.
-    function getCalldataPtr() internal view returns (uint256 ptr) {
-        address callAddr = PTR_CALLDATA_CALL_ADDRESS;
-        assembly {
-            ptr := staticcall(0, callAddr, 0, 0xFFFF, 0, 0)
-        }
-    }
-    
-    /// @notice Returns the first extraAbiParam for the current call.
-    /// @return extraAbiData1 The value of the first extraAbiParam for this call.
-    /// @dev It is equal to the value of the second register
-    /// at the start of the call.
-    /// @dev It can only be non-zero during system calls.
-    function getExtraAbiData1() internal view returns (uint256 extraAbiData1) {
-        address callAddr = GET_EXTRA_ABI_DATA_1_ADDRESS;
-        assembly {
-            extraAbiData1 := staticcall(0, callAddr, 0, 0xFFFF, 0, 0)
-        }
-    }
-    
-    /// @notice Returns the second extraAbiParam for the current call.
-    /// @return extraAbiData2 The value of the second extraAbiParam for this call.
-    /// @dev It is equal to the value of the third register
-    /// at the start of the call.
-    /// @dev It can only be non-zero during system calls.
-    function getExtraAbiData2() internal view returns (uint256 extraAbiData2) {
-        address callAddr = GET_EXTRA_ABI_DATA_2_ADDRESS;
-        assembly {
-            extraAbiData2 := staticcall(0, callAddr, 0, 0xFFFF, 0, 0)
-        }
-    }   
-
-    /// @notice Retuns whether the current call is a system call.
-    /// @return `true` or `false` based on whether the current call is a system call.
-    function isSystemCall() internal view returns (bool) {
-        uint256 callFlags = getCallFlags();
-        // When the system call is passed, the 2-bit it set to 1
-        return (callFlags & 2) != 0;
-    }
-    
-    /// @notice Returns whether the address is a system contract.
-    /// @param _address The address to test
-    /// @return `true` or `false` based on whether the `_address` is a system contract.
-    function isSystemContract(address _address) internal pure returns (bool) {
-        return uint160(_address) < uint160(MAX_SYSTEM_CONTRACT_ADDRESS);
-    }
-}
-
-/// @dev Solidity does not allow exporting modifiers via libraries, so
-/// the only way to do reuse modifiers is to have a base contract
-abstract contract ISystemContract {
-    /// @notice Modifier that makes sure that the method 
-    /// can only be called via a system call.
-    modifier onlySystemCall {
-        require(SystemContractHelper.isSystemCall() || SystemContractHelper.isSystemContract(msg.sender), "This method require system call flag");
+contract SystemContext is ISystemContext {
+    modifier onlyBootloader() {
+        require(msg.sender == BOOTLOADER_FORMAL_ADDRESS);
         _;
+    }
+
+    /// @notice The chainId of the network. It is set at the genesis.
+    uint256 public chainId;
+
+    /// @notice The `tx.origin` in the current transaction.
+    /// @dev It is updated before each transaction by the bootloader
+    address public origin;
+
+    /// @notice The `tx.gasPrice` in the current transaction.
+    /// @dev It is updated before each transaction by the bootloader
+    uint256 public gasPrice;
+
+    /// @notice The current block's gasLimit (gasLimit in Ethereum terms).
+    /// @dev Currently set to some dummy value, it will be changed closer to mainnet.
+    uint256 public blockGasLimit = (1 << 30);
+
+    /// @notice The `block.coinbase` in the current transaction.
+    /// @dev For the support of coinbase, we will the bootloader formal address for now
+    address public coinbase = BOOTLOADER_FORMAL_ADDRESS;
+
+    /// @notice Formal `block.difficulty` parameter.
+    uint256 public difficulty = 2500000000000000;
+
+    /// @notice The `block.basefee`.
+    /// @dev It is currently a constant.
+    uint256 public baseFee;
+
+    /// @notice The coefficient with which the current block's number
+    /// is stored in the current block info
+    uint256 constant BLOCK_INFO_BLOCK_NUMBER_PART = 2 ** 128;
+
+    /// @notice block.number and block.timestamp stored packed.
+    /// @dev It is equal to 2^128 * block_number + block_timestamp.
+    uint256 public currentBlockInfo;
+
+    /// @notice The hashes of blocks.
+    /// @dev It stores block hashes for all previous blocks.
+    mapping(uint256 => bytes32) public blockHash;
+
+    /// @notice Set the current tx origin.
+    /// @param _newOrigin The new tx origin.
+    function setTxOrigin(address _newOrigin) external onlyBootloader {
+        origin = _newOrigin;
+    }
+
+    /// @notice Set the current tx origin.
+    /// @param _gasPrice The new tx gasPrice.
+    function setGasPrice(uint256 _gasPrice) external onlyBootloader {
+        gasPrice = _gasPrice;
+    }
+
+    /// @notice The method that emulates `blockhash` opcode in EVM.
+    /// @dev Just like the blockhash in the EVM, it returns bytes32(0), when
+    /// when queried about hashes that are older than 256 blocks ago.
+    function getBlockHashEVM(uint256 _block) external view returns (bytes32 hash) {
+        if (block.number < _block || block.number - _block > 256) {
+            hash = bytes32(0);
+        } else {
+            hash = blockHash[_block];
+        }
+    }
+
+    /// @notice Returns the current blocks' number and timestamp.
+    /// @return blockNumber and blockTimestamp tuple of the current block's number and the current block's timestamp
+    function getBlockNumberAndTimestamp() public view returns (uint256 blockNumber, uint256 blockTimestamp) {
+        uint256 blockInfo = currentBlockInfo;
+        blockNumber = blockInfo / BLOCK_INFO_BLOCK_NUMBER_PART;
+        blockTimestamp = blockInfo % BLOCK_INFO_BLOCK_NUMBER_PART;
+    }
+
+    /// @notice Returns the current block's number.
+    /// @return blockNumber The current block's number.
+    function getBlockNumber() public view returns (uint256 blockNumber) {
+        (blockNumber, ) = getBlockNumberAndTimestamp();
+    }
+
+    /// @notice Returns the current block's timestamp.
+    /// @return timestamp The current block's timestamp.
+    function getBlockTimestamp() public view returns (uint256 timestamp) {
+        (, timestamp) = getBlockNumberAndTimestamp();
+    }
+
+    /// @notice Increments the current block number and sets the new timestamp
+    /// @dev Called by the bootloader at the start of the block.
+    /// @param _prevBlockHash The hash of the previous block.
+    /// @param _newTimestamp The timestamp of the new block.
+    /// @param _expectedNewNumber The new block's number
+    /// @dev Whie _expectedNewNumber can be derived as prevBlockNumber + 1, we still
+    /// manually supply it here for consistency checks.
+    /// @dev The correctness of the _prevBlockHash and _newTimestamp should be enforced on L1.
+    function setNewBlock(
+        bytes32 _prevBlockHash,
+        uint256 _newTimestamp,
+        uint256 _expectedNewNumber,
+        uint256 _baseFee
+    ) external onlyBootloader {
+        (uint256 currentBlockNumber, uint256 currentBlockTimestamp) = getBlockNumberAndTimestamp();
+        require(_newTimestamp >= currentBlockTimestamp, "Timestamps should be incremental");
+        require(currentBlockNumber + 1 == _expectedNewNumber, "The provided block number is not correct");
+
+        blockHash[currentBlockNumber] = _prevBlockHash;
+
+        // Setting new block number and timestamp
+        currentBlockInfo = (currentBlockNumber + 1) * BLOCK_INFO_BLOCK_NUMBER_PART + _newTimestamp;
+
+        baseFee = _baseFee;
+
+        // The correctness of this block hash and the timestamp will be checked on L1:
+        SystemContractHelper.toL1(false, bytes32(_newTimestamp), _prevBlockHash);
+    }
+
+    /// @notice A testing method that manually sets the current blocks' number and timestamp.
+    /// @dev Should be used only for testing / ethCalls and should never be used in production.
+    function unsafeOverrideBlock(uint256 _newTimestamp, uint256 number, uint256 _baseFee) external onlyBootloader {
+        currentBlockInfo = (number) * BLOCK_INFO_BLOCK_NUMBER_PART + _newTimestamp;
+        baseFee = _baseFee;
     }
 }

@@ -1,8 +1,8 @@
+// SPDX-License-Identifier: MIT
+
 pragma solidity ^0.8.0;
 
-// SPDX-License-Identifier: MIT OR Apache-2.0
-
-
+import "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 import "./interfaces/IAllowList.sol";
 import "./libraries/UncheckedMath.sol";
@@ -10,35 +10,28 @@ import "./libraries/UncheckedMath.sol";
 /// @author Matter Labs
 /// @notice The smart contract that stores the permissions to call the function on different contracts.
 /// @dev The contract is fully controlled by the owner, that can grant and revoke any permissions at any time.
-/// @dev The permission list is implemented as both:
-/// - Access list of (caller address, target address, function to call, boolean value of permission to call)
-/// - Access list to call any function from the target contract by any caller
-/// If the target contract is in the second list, then it is automatically available for calling any function.
-/// Otherwise, it checks whether the caller has access to call the contract from the first list.
-contract AllowList is IAllowList {
+/// @dev The permission list has three different modes:
+/// - Closed. The contract can NOT be called by anyone.
+/// - SpecialAccessOnly. Only some contract functions can be called by specifically granted addresses.
+/// - Public. Access list to call any function from the target contract by any caller
+contract AllowList is IAllowList, Ownable2Step {
     using UncheckedMath for uint256;
 
-    /// @notice The address that the owner proposed as one that will replace its
-    address public pendingOwner;
-
-    /// @notice The address with permission to change other users' permissions
-    address public owner;
-
-    /// @notice mapping of the addresses that everyone has permission to call
-    mapping(address => bool) public isAccessPublic;
+    /// @notice The Access mode by which it is decided whether the caller has access
+    mapping(address => AccessMode) public getAccessMode;
 
     /// @notice The mapping that stores permissions to call the function on the target address by the caller
     /// @dev caller => target => function signature => permission to call target function for the given caller address
     mapping(address => mapping(address => mapping(bytes4 => bool))) public hasSpecialAccessToCall;
 
-    constructor(address _owner) {
-        require(_owner != address(0), "kq");
-        owner = _owner;
-    }
+    /// @dev The mapping L1 token address => struct Withdrawal
+    mapping(address => Withdrawal) public tokenWithdrawal;
 
-    modifier onlyOwner() {
-        require(msg.sender == owner, "kx");
-        _;
+    /// @dev The mapping L1 token address => struct Deposit
+    mapping(address => Deposit) public tokenDeposit;
+
+    constructor(address _owner) {
+        _transferOwnership(_owner);
     }
 
     /// @return Whether the caller can call the specific function on the target contract
@@ -50,36 +43,39 @@ contract AllowList is IAllowList {
         address _target,
         bytes4 _functionSig
     ) external view returns (bool) {
-        return isAccessPublic[_target] || hasSpecialAccessToCall[_caller][_target][_functionSig];
+        AccessMode accessMode = getAccessMode[_target];
+        return
+            accessMode == AccessMode.Public ||
+            (accessMode == AccessMode.SpecialAccessOnly && hasSpecialAccessToCall[_caller][_target][_functionSig]);
     }
 
-    /// @notice Set the permission to call the target contract by anyone
+    /// @notice Set the permission mode to call the target contract
     /// @param _target The address of the smart contract, of which access to the call is to be changed
-    /// @param _enable Whether enable or disable the public access
-    function setPublicAccess(address _target, bool _enable) external onlyOwner {
-        _setPublicAccess(_target, _enable);
+    /// @param _accessMode Whether no one, any or only some addresses can call the target contract
+    function setAccessMode(address _target, AccessMode _accessMode) external onlyOwner {
+        _setAccessMode(_target, _accessMode);
     }
 
-    /// @notice Set many permissions to call the targets contract by anyone
-    /// @dev Analogous to function `setPublicAccess` but performs a batch of changes
+    /// @notice Set many permission modes to call the target contracts
+    /// @dev Analogous to function `setAccessMode` but performs a batch of changes
     /// @param _targets The array of smart contract addresses, of which access to the call is to be changed
-    /// @param _enables The array of boolean flags, whether enable or disable the public access to the corresponding target address
-    function setBatchPublicAccess(address[] calldata _targets, bool[] calldata _enables) external onlyOwner {
+    /// @param _accessModes The array of new permission modes, whether no one, any or only some addresses can call the target contract
+    function setBatchAccessMode(address[] calldata _targets, AccessMode[] calldata _accessModes) external onlyOwner {
         uint256 targetsLength = _targets.length;
-        require(targetsLength == _enables.length, "yg"); // The size of arrays should be equal
+        require(targetsLength == _accessModes.length, "yg"); // The size of arrays should be equal
 
         for (uint256 i = 0; i < targetsLength; i = i.uncheckedInc()) {
-            _setPublicAccess(_targets[i], _enables[i]);
+            _setAccessMode(_targets[i], _accessModes[i]);
         }
     }
 
-    /// @dev Changes public access and emits the event if the access was changed
-    function _setPublicAccess(address _target, bool _enable) internal {
-        bool isEnabled = isAccessPublic[_target];
+    /// @dev Changes access mode and emit the event if the access was changed
+    function _setAccessMode(address _target, AccessMode _accessMode) internal {
+        AccessMode accessMode = getAccessMode[_target];
 
-        if (isEnabled != _enable) {
-            isAccessPublic[_target] = _enable;
-            emit UpdatePublicAccess(_target, _enable);
+        if (accessMode != _accessMode) {
+            getAccessMode[_target] = _accessMode;
+            emit UpdateAccessMode(_target, accessMode, _accessMode);
         }
     }
 
@@ -95,12 +91,11 @@ contract AllowList is IAllowList {
         bool[] calldata _enables
     ) external onlyOwner {
         uint256 callersLength = _callers.length;
-        require(
-            callersLength == _targets.length &&
-                callersLength == _functionSigs.length &&
-                callersLength == _enables.length,
-            "yw"
-        ); // The size of arrays should be equal
+
+        // The size of arrays should be equal
+        require(callersLength == _targets.length, "yw");
+        require(callersLength == _functionSigs.length, "yx");
+        require(callersLength == _enables.length, "yy");
 
         for (uint256 i = 0; i < callersLength; i = i.uncheckedInc()) {
             _setPermissionToCall(_callers[i], _targets[i], _functionSigs[i], _enables[i]);
@@ -136,32 +131,42 @@ contract AllowList is IAllowList {
         }
     }
 
-    /// @notice Starts the transfer of the ownership rights. Only the current owner can propose a new pending one.
-    /// @notice New owner can accept owner rights by calling `acceptOwner` function.
-    /// @param _newPendingOwner Address of the new owner
-    function setPendingOwner(address _newPendingOwner) external onlyOwner {
-        // Save previous value into the stack to put it into the event later
-        address oldPendingOwner = pendingOwner;
-
-        if (oldPendingOwner != _newPendingOwner) {
-            // Change pending owner
-            pendingOwner = _newPendingOwner;
-
-            emit NewPendingOwner(oldPendingOwner, _newPendingOwner);
-        }
+    /// @dev Set withdrwal limit data for a token
+    /// @param _l1Token The address of L1 token
+    /// @param _withdrawalLimitation withdrawal limitation is active or not
+    /// @param _withdrawalFactor The percentage of allowed withdrawal. A withdrawalFactor of 10 means maximum %10 of bridge balance can be withdrawn
+    function setWithdrawalLimit(
+        address _l1Token,
+        bool _withdrawalLimitation,
+        uint256 _withdrawalFactor
+    ) external onlyOwner {
+        require(_withdrawalFactor <= 100, "wf");
+        tokenWithdrawal[_l1Token].withdrawalLimitation = _withdrawalLimitation;
+        tokenWithdrawal[_l1Token].withdrawalFactor = _withdrawalFactor;
     }
 
-    /// @notice Accepts transfer of admin rights. Only the pending owner can accept the role.
-    function acceptOwner() external {
-        address newOwner = pendingOwner;
-        require(msg.sender == newOwner, "n0"); // Only proposed by current owner address can claim the owner rights
+    /// @dev Get withdrawal limit data of a token
+    /// @param _l1Token The address of L1 token
+    function getTokenWithdrawalLimitData(address _l1Token) external view returns (Withdrawal memory) {
+        return tokenWithdrawal[_l1Token];
+    }
 
-        if (newOwner != owner) {
-            owner = newOwner;
-            delete pendingOwner;
+    /// @dev Set deposit limit data for a token
+    /// @param _l1Token The address of L1 token
+    /// @param _depositLimitation deposit limitation is active or not
+    /// @param _depositCap The maximum amount that can be deposited.
+    function setDepositLimit(
+        address _l1Token,
+        bool _depositLimitation,
+        uint256 _depositCap
+    ) external onlyOwner {
+        tokenDeposit[_l1Token].depositLimitation = _depositLimitation;
+        tokenDeposit[_l1Token].depositCap = _depositCap;
+    }
 
-            emit NewPendingOwner(newOwner, address(0));
-            emit NewOwner(newOwner);
-        }
+    /// @dev Get deposit limit data of a token
+    /// @param _l1Token The address of L1 token
+    function getTokenDepositLimitData(address _l1Token) external view returns (Deposit memory) {
+        return tokenDeposit[_l1Token];
     }
 }

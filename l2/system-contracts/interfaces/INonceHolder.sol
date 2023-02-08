@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 
 pragma solidity ^0.8.0;
 
@@ -7,14 +7,14 @@ pragma solidity ^0.8.0;
  * @dev Interface of the nonce holder contract -- a contract used by the system to ensure
  * that there is always a unique identifier for a transaction with a particular account (we call it nonce).
  * In other words, the pair of (address, nonce) should always be unique.
- * @dev Custom accounts should use methods of this contract to store nonces or other possible unique identifiers 
+ * @dev Custom accounts should use methods of this contract to store nonces or other possible unique identifiers
  * for the transaction.
  */
 interface INonceHolder {
     /// @dev Returns the current minimal nonce for account.
-    function getMinNonce(address _address) external view returns(uint256);
+    function getMinNonce(address _address) external view returns (uint256);
 
-    /// @dev Returns the raw version of the current minimal nonce 
+    /// @dev Returns the raw version of the current minimal nonce
     /// (equal to minNonce + 2^128 * deployment nonce).
     function getRawNonce(address _address) external view returns (uint256);
 

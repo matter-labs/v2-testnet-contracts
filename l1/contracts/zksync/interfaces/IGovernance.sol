@@ -1,8 +1,6 @@
-pragma solidity ^0.8;
+// SPDX-License-Identifier: MIT
 
-// SPDX-License-Identifier: MIT OR Apache-2.0
-
-
+pragma solidity ^0.8.0;
 
 import "../Verifier.sol";
 import "../Storage.sol";
@@ -18,11 +16,13 @@ interface IGovernance {
 
     function setL2DefaultAccountBytecodeHash(bytes32 _l2DefaultAccountBytecodeHash) external;
 
-    function setPorterAvailability(bool _isPorterAvailable) external;
+    function setPorterAvailability(bool _zkPorterIsAvailable) external;
 
     function setVerifier(Verifier _newVerifier) external;
 
     function setVerifierParams(VerifierParams calldata _newVerifierParams) external;
+
+    function setPriorityTxMaxGasLimit(uint256 _newPriorityTxMaxGasLimit) external;
 
     /// @notice Сhanges to the bytecode that is used in L2 as a bootloader (start program)
     event NewL2BootloaderBytecodeHash(bytes32 indexed previousBytecodeHash, bytes32 indexed newBytecodeHash);
@@ -48,4 +48,7 @@ interface IGovernance {
 
     /// @notice Verifier address changed
     event NewVerifierParams(VerifierParams oldVerifierParams, VerifierParams newVerifierParams);
+
+    /// @notice Priority transaction max L2 gas limit changed
+    event NewPriorityTxMaxGasLimit(uint256 oldPriorityTxMaxGasLimit, uint256 newPriorityTxMaxGasLimit);
 }

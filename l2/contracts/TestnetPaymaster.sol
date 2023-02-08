@@ -1,12 +1,11 @@
-pragma solidity ^0.8.0;
-
 // SPDX-License-Identifier: MIT
 
+pragma solidity ^0.8.0;
 
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import "./interfaces/IPaymaster.sol";
 import "./interfaces/IPaymasterFlow.sol";
-import "./interfaces/IERC20.sol";
 import "./L2ContractHelper.sol";
 
 // This is a dummy paymaster. It expects the paymasterInput to contain its "signature" as well as the needed exchange rate.
@@ -16,7 +15,10 @@ contract TestnetPaymaster is IPaymaster {
         bytes32,
         bytes32,
         Transaction calldata _transaction
-    ) external payable returns (bytes memory context) {
+    ) external payable returns (bytes4 magic, bytes memory context) {
+        // By default we consider the transaction as accepted.
+        magic = PAYMASTER_VALIDATION_SUCCESS_MAGIC;
+
         require(msg.sender == BOOTLOADER_ADDRESS, "Only bootloader can call this contract");
         require(_transaction.paymasterInput.length >= 4, "The standard paymaster input must be at least 4 bytes long");
 
@@ -34,8 +36,15 @@ contract TestnetPaymaster is IPaymaster {
             require(providedAllowance >= amount, "The user did not provide enough allowance");
 
             // The testnet paymaster exchanges X wei of the token to the X wei of ETH.
-            uint256 requiredETH = _transaction.ergsLimit * _transaction.maxFeePerErg;
-            require(amount >= requiredETH, "User does not provide enough tokens to exchange");
+            uint256 requiredETH = _transaction.gasLimit * _transaction.maxFeePerGas;
+            if (amount < requiredETH) {
+                // Important note: while this clause definitely means that the user
+                // has underpaid the paymaster and the transaction should not accepted,
+                // we do not want the transaction to revert, because for fee estimation
+                // we allow users to provide smaller amount of funds then necessary to preserve
+                // the property that if using X gas the transaction success, then it will succeed with X+1 gas.
+                magic = bytes4(0);
+            }
 
             // Pulling all the tokens from the user
             try IERC20(token).transferFrom(userAddress, thisAddress, amount) {} catch (bytes memory revertReason) {
@@ -58,13 +67,13 @@ contract TestnetPaymaster is IPaymaster {
         }
     }
 
-    function postOp(
+    function postTransaction(
         bytes calldata _context,
         Transaction calldata _transaction,
         bytes32,
         bytes32,
         ExecutionResult _txResult,
-        uint256 _maxRefundedErgs
+        uint256 _maxRefundedGas
     ) external payable override {
         // Refunds are not supported yet.
     }

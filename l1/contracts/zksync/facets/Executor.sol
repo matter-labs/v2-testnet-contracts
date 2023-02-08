@@ -1,8 +1,6 @@
+// SPDX-License-Identifier: MIT
+
 pragma solidity ^0.8.0;
-
-// SPDX-License-Identifier: MIT OR Apache-2.0
-
-
 
 import "./Base.sol";
 import "../Config.sol";
@@ -25,7 +23,7 @@ contract ExecutorFacet is Base, IExecutor {
     function _commitOneBlock(StoredBlockInfo memory _previousBlock, CommitBlockInfo calldata _newBlock)
         internal
         view
-        returns (StoredBlockInfo memory storedNewBlock)
+        returns (StoredBlockInfo memory)
     {
         require(_newBlock.blockNumber == _previousBlock.blockNumber + 1, "f"); // only commit next block
 
@@ -42,9 +40,9 @@ contract ExecutorFacet is Base, IExecutor {
         // Check that the priority operation hash in the L2 logs is as expected
         require(expectedPriorityOperationsHash == _newBlock.priorityOperationsHash, "t");
         // Check that the number of processed priority operations is as expected
-        require(expectedNumberOfLayer1Txs == _newBlock.numberOfLayer1Txs);
+        require(expectedNumberOfLayer1Txs == _newBlock.numberOfLayer1Txs, "ta");
         // Check that the timestamp that came from the Bootloader is expected
-        require(l2BlockTimestamp == _newBlock.timestamp);
+        require(l2BlockTimestamp == _newBlock.timestamp, "tb");
 
         // Preventing "stack too deep error"
         {
@@ -61,6 +59,8 @@ contract ExecutorFacet is Base, IExecutor {
                     _newBlock.indexRepeatedStorageChanges,
                 "yq"
             );
+
+            // NOTE: We don't check that _newBlock.timestamp > _previousBlock.timestamp, it is checked inside the L2
         }
 
         // Create block commitment for the proof verification
@@ -77,14 +77,6 @@ contract ExecutorFacet is Base, IExecutor {
                 _newBlock.timestamp,
                 commitment
             );
-    }
-
-    function _calculateBlockHash(StoredBlockInfo memory _previousBlock, CommitBlockInfo calldata _newBlock)
-        internal
-        pure
-        returns (bytes32)
-    {
-        return keccak256(abi.encode(_previousBlock.blockHash, _newBlock.newStateRoot));
     }
 
     /// @dev Check that L2 logs are proper and block contain all meta information for them
@@ -108,10 +100,9 @@ contract ExecutorFacet is Base, IExecutor {
         uint256 currentBytecode;
 
         chainedPriorityTxsHash = EMPTY_STRING_KECCAK;
-        uint256 emittedL2LogsLength = emittedL2Logs.length;
 
         // linear traversal of the logs
-        for (uint256 i = 0; i < emittedL2LogsLength; ) {
+        for (uint256 i = 0; i < emittedL2Logs.length; i = i.uncheckedAdd(L2_TO_L1_LOG_SERIALIZE_SIZE)) {
             (address logSender, ) = UnsafeBytes.readAddress(emittedL2Logs, i + 4);
 
             // show preimage for hashed message stored in log
@@ -119,17 +110,13 @@ contract ExecutorFacet is Base, IExecutor {
                 (bytes32 hashedMessage, ) = UnsafeBytes.readBytes32(emittedL2Logs, i + 56);
                 require(keccak256(l2Messages[currentMessage]) == hashedMessage, "k2");
 
-                unchecked {
-                    ++currentMessage;
-                }
+                currentMessage = currentMessage.uncheckedInc();
             } else if (logSender == L2_BOOTLOADER_ADDRESS) {
                 (bytes32 canonicalTxHash, ) = UnsafeBytes.readBytes32(emittedL2Logs, i + 24);
                 chainedPriorityTxsHash = keccak256(abi.encode(chainedPriorityTxsHash, canonicalTxHash));
 
                 // Overflow is not realistic
-                unchecked {
-                    ++numberOfLayer1Txs;
-                }
+                numberOfLayer1Txs = numberOfLayer1Txs.uncheckedInc();
             } else if (logSender == L2_SYSTEM_CONTEXT_ADDRESS) {
                 // Make sure that the system context log wasn't processed yet, to
                 // avoid accident double reading `blockTimestamp` and `previousBlockHash`
@@ -142,14 +129,7 @@ contract ExecutorFacet is Base, IExecutor {
                 (bytes32 bytecodeHash, ) = UnsafeBytes.readBytes32(emittedL2Logs, i + 24);
                 require(bytecodeHash == L2ContractHelper.hashL2Bytecode(factoryDeps[currentBytecode]), "k3");
 
-                unchecked {
-                    ++currentBytecode;
-                }
-            }
-
-            // move the pointer to the next log
-            unchecked {
-                i += L2_TO_L1_LOG_SERIALIZE_SIZE;
+                currentBytecode = currentBytecode.uncheckedInc();
             }
         }
         // To check that only relevant preimages have been included in the calldata
@@ -173,7 +153,7 @@ contract ExecutorFacet is Base, IExecutor {
         require(s.storedBlockHashes[s.totalBlocksCommitted] == _hashStoredBlockInfo(_lastCommittedBlockData), "i"); // incorrect previous block data
 
         uint256 blocksLength = _newBlocksData.length;
-        for (uint256 i = 0; i < blocksLength; ) {
+        for (uint256 i = 0; i < blocksLength; i = i.uncheckedInc()) {
             _lastCommittedBlockData = _commitOneBlock(_lastCommittedBlockData, _newBlocksData[i]);
             s.storedBlockHashes[_lastCommittedBlockData.blockNumber] = _hashStoredBlockInfo(_lastCommittedBlockData);
 
@@ -182,10 +162,6 @@ contract ExecutorFacet is Base, IExecutor {
                 _lastCommittedBlockData.blockHash,
                 _lastCommittedBlockData.commitment
             );
-
-            unchecked {
-                ++i;
-            }
         }
 
         s.totalBlocksCommitted = s.totalBlocksCommitted + blocksLength;
@@ -195,13 +171,9 @@ contract ExecutorFacet is Base, IExecutor {
     function _collectOperationsFromPriorityQueue(uint256 _nPriorityOps) internal returns (bytes32 concatHash) {
         concatHash = EMPTY_STRING_KECCAK;
 
-        for (uint256 i = 0; i < _nPriorityOps; ) {
+        for (uint256 i = 0; i < _nPriorityOps; i = i.uncheckedInc()) {
             PriorityOperation memory priorityOp = s.priorityQueue.popFront();
             concatHash = keccak256(abi.encode(concatHash, priorityOp.canonicalTxHash));
-
-            unchecked {
-                ++i;
-            }
         }
     }
 
@@ -229,17 +201,13 @@ contract ExecutorFacet is Base, IExecutor {
     /// @notice 2. Finalizes block on Ethereum
     function executeBlocks(StoredBlockInfo[] calldata _blocksData) external nonReentrant onlyValidator {
         uint256 nBlocks = _blocksData.length;
-        for (uint256 i = 0; i < nBlocks; ) {
+        for (uint256 i = 0; i < nBlocks; i = i.uncheckedInc()) {
             _executeOneBlock(_blocksData[i], i);
             emit BlockExecution(_blocksData[i].blockNumber, _blocksData[i].blockHash, _blocksData[i].commitment);
-
-            unchecked {
-                ++i;
-            }
         }
 
         s.totalBlocksExecuted = s.totalBlocksExecuted + nBlocks;
-        require(s.totalBlocksExecuted <= s.totalBlocksVerified, "n"); // Can't execute blocks more then committed and proven currently.
+        require(s.totalBlocksExecuted <= s.totalBlocksVerified, "n"); // Can't execute blocks more than committed and proven currently.
     }
 
     /// @notice Blocks commitment verification.
@@ -247,8 +215,7 @@ contract ExecutorFacet is Base, IExecutor {
     function proveBlocks(
         StoredBlockInfo calldata _prevBlock,
         StoredBlockInfo[] calldata _committedBlocks,
-        ProofInput calldata _proof,
-        BlockVerificationMode _verificationMode
+        ProofInput calldata _proof
     ) external nonReentrant onlyValidator {
         // Save the variables into the stack to save gas on reading them later
         uint256 currentTotalBlocksVerified = s.totalBlocksVerified;
@@ -265,11 +232,8 @@ contract ExecutorFacet is Base, IExecutor {
 
         bytes32 prevBlockCommitment = _prevBlock.commitment;
         for (uint256 i = 0; i < committedBlocksLength; i = i.uncheckedInc()) {
-            require(
-                _hashStoredBlockInfo(_committedBlocks[i]) ==
-                    s.storedBlockHashes[currentTotalBlocksVerified.uncheckedInc()],
-                "o1"
-            );
+            currentTotalBlocksVerified = currentTotalBlocksVerified.uncheckedInc();
+            require(_hashStoredBlockInfo(_committedBlocks[i]) == s.storedBlockHashes[currentTotalBlocksVerified], "o1");
 
             bytes32 currentBlockCommitment = _committedBlocks[i].commitment;
             proofPublicInput[i] = _getBlockProofPublicInput(
@@ -280,21 +244,17 @@ contract ExecutorFacet is Base, IExecutor {
             );
 
             prevBlockCommitment = currentBlockCommitment;
-            currentTotalBlocksVerified = currentTotalBlocksVerified.uncheckedInc();
         }
-
-        // Verify proof only if the verification mode specified that
-        if (_verificationMode == BlockVerificationMode.Verify) {
-            bool successVerifyProof = s.verifier.verify_serialized_proof(proofPublicInput, _proof.serializedProof);
-            require(successVerifyProof, "p"); // Proof verification fail
-
-            // Verify the recursive part that was given to us through the public input
-            bool successProofAggregation = _verifyRecursivePartOfProof(_proof.recurisiveAggregationInput);
-            require(successProofAggregation, "hh"); // Proof aggregation must be valid
-        }
-
         require(currentTotalBlocksVerified <= s.totalBlocksCommitted, "q");
-        emit BlocksVerification(s.totalBlocksVerified, currentTotalBlocksVerified, _verificationMode);
+
+        bool successVerifyProof = s.verifier.verify_serialized_proof(proofPublicInput, _proof.serializedProof);
+        require(successVerifyProof, "p"); // Proof verification fail
+
+        // Verify the recursive part that was given to us through the public input
+        bool successProofAggregation = _verifyRecursivePartOfProof(_proof.recursiveAggregationInput);
+        require(successProofAggregation, "hh"); // Proof aggregation must be valid
+
+        emit BlocksVerification(s.totalBlocksVerified, currentTotalBlocksVerified);
         s.totalBlocksVerified = currentTotalBlocksVerified;
     }
 
@@ -314,23 +274,23 @@ contract ExecutorFacet is Base, IExecutor {
                         _verifierParams.recursionNodeLevelVkHash,
                         _verifierParams.recursionLeafLevelVkHash,
                         _verifierParams.recursionCircuitsSetVksHash,
-                        _proof.recurisiveAggregationInput
+                        _proof.recursiveAggregationInput
                     )
                 )
             ) & INPUT_MASK;
     }
 
     /// @dev Verify a part of the zkp, that is responsible for the aggregation
-    function _verifyRecursivePartOfProof(uint256[] calldata _recurisiveAggregationInput) internal view returns (bool) {
-        require(_recurisiveAggregationInput.length == 4);
+    function _verifyRecursivePartOfProof(uint256[] calldata _recursiveAggregationInput) internal view returns (bool) {
+        require(_recursiveAggregationInput.length == 4, "vr");
 
         PairingsBn254.G1Point memory pairWithGen = PairingsBn254.new_g1_checked(
-            _recurisiveAggregationInput[0],
-            _recurisiveAggregationInput[1]
+            _recursiveAggregationInput[0],
+            _recursiveAggregationInput[1]
         );
         PairingsBn254.G1Point memory pairWithX = PairingsBn254.new_g1_checked(
-            _recurisiveAggregationInput[2],
-            _recurisiveAggregationInput[3]
+            _recursiveAggregationInput[2],
+            _recursiveAggregationInput[3]
         );
 
         PairingsBn254.G2Point memory g2Gen = PairingsBn254.new_g2(
@@ -362,7 +322,7 @@ contract ExecutorFacet is Base, IExecutor {
     /// NOTE: Doesn't delete the stored data about blocks, but only decreases
     /// counters that are responsible for the number of blocks
     function revertBlocks(uint256 _newLastBlock) external nonReentrant onlyValidator {
-        require(s.totalBlocksCommitted > _newLastBlock, "v1"); // the last committed block is less new last block
+        require(s.totalBlocksCommitted > _newLastBlock, "v1"); // The last committed block is less than new last block
         uint256 newTotalBlocksCommitted = _maxU256(_newLastBlock, s.totalBlocksExecuted);
 
         if (newTotalBlocksCommitted < s.totalBlocksVerified) {
@@ -381,8 +341,8 @@ contract ExecutorFacet is Base, IExecutor {
     /// @dev Creates block commitment from its data
     function _createBlockCommitment(CommitBlockInfo calldata _newBlockData) internal view returns (bytes32) {
         bytes32 passThroughDataHash = keccak256(_blockPassThroughData(_newBlockData));
-        bytes32 metadataHash = keccak256(_blockMetaParameters(_newBlockData));
-        bytes32 auxiliaryOutputHash = keccak256(_blockAuxilaryOutput(_newBlockData));
+        bytes32 metadataHash = keccak256(_blockMetaParameters());
+        bytes32 auxiliaryOutputHash = keccak256(_blockAuxiliaryOutput(_newBlockData));
 
         return keccak256(abi.encode(passThroughDataHash, metadataHash, auxiliaryOutputHash));
     }
@@ -397,11 +357,15 @@ contract ExecutorFacet is Base, IExecutor {
             );
     }
 
-    function _blockMetaParameters(CommitBlockInfo calldata _block) internal view returns (bytes memory) {
+    function _blockMetaParameters() internal view returns (bytes memory) {
         return abi.encodePacked(s.zkPorterIsAvailable, s.l2BootloaderBytecodeHash, s.l2DefaultAccountBytecodeHash);
     }
 
-    function _blockAuxilaryOutput(CommitBlockInfo calldata _block) internal pure returns (bytes memory) {
+    function _blockAuxiliaryOutput(CommitBlockInfo calldata _block) internal pure returns (bytes memory) {
+        require(_block.initialStorageChanges.length <= MAX_INITIAL_STORAGE_CHANGES_COMMITMENT_BYTES, "pf");
+        require(_block.repeatedStorageChanges.length <= MAX_REPEATED_STORAGE_CHANGES_COMMITMENT_BYTES, "py");
+        require(_block.l2Logs.length <= MAX_L2_TO_L1_LOGS_COMMITMENT_BYTES, "pu");
+
         bytes32 initialStorageChangesHash = keccak256(_block.initialStorageChanges);
         bytes32 repeatedStorageChangesHash = keccak256(_block.repeatedStorageChanges);
         bytes32 l2ToL1LogsHash = keccak256(_block.l2Logs);

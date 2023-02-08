@@ -1,92 +1,161 @@
-pragma solidity ^0.8.0;
-
 // SPDX-License-Identifier: MIT
 
+pragma solidity ^0.8.0;
 
-
+import "../../common/libraries/UncheckedMath.sol";
 import "../interfaces/IDiamondCut.sol";
 import "../libraries/Diamond.sol";
 import "../Config.sol";
 import "./Base.sol";
 
-/// @title DiamondCut contract responsible for the management of upgrades.
+/// @title DiamondCutFacet - contract responsible for the management of upgrades.
 /// @author Matter Labs
 contract DiamondCutFacet is Base, IDiamondCut {
-    constructor() {
-        // Caution check for config value.
-        // Should be greater than 0, otherwise zero approvals will be enough to make an instant upgrade!
-        assert(SECURITY_COUNCIL_APPROVALS_FOR_EMERGENCY_UPGRADE > 0);
+    using UncheckedMath for uint256;
+
+    modifier upgradeProposed() {
+        require(s.upgrades.state != UpgradeState.None, "a3"); // Proposal doesn't exist
+        _;
     }
 
-    /// @dev Starts the upgrade process. Only the current governor can propose an upgrade.
-    /// @param _facetCuts The set of proposed changes to the facets (adding/replacement/removing)
-    /// @param _initAddress Address of the fallback contract that will be called after the upgrade execution
-    function proposeDiamondCut(Diamond.FacetCut[] calldata _facetCuts, address _initAddress) external onlyGovernor {
-        require(s.diamondCutStorage.proposedDiamondCutTimestamp == 0, "a3"); // proposal already exists
-
-        // NOTE: governor commits only to the `facetCuts` and `initAddress`, but not to the calldata on `initAddress` call.
-        // That means the governor can call `initAddress` with ANY calldata while executing the upgrade.
-        s.diamondCutStorage.proposedDiamondCutHash = keccak256(abi.encode(_facetCuts, _initAddress));
-        s.diamondCutStorage.proposedDiamondCutTimestamp = block.timestamp;
-        s.diamondCutStorage.currentProposalId += 1;
-
-        emit DiamondCutProposal(_facetCuts, _initAddress);
+    modifier noUpgradeProposed() {
+        require(s.upgrades.state == UpgradeState.None, "a8"); // Proposal already exists
+        _;
     }
 
-    /// @notice Removes the upgrade proposal. Only current governor can remove proposal.
-    function cancelDiamondCutProposal() external onlyGovernor {
-        emit DiamondCutProposalCancelation(
-            s.diamondCutStorage.currentProposalId,
-            s.diamondCutStorage.proposedDiamondCutHash
-        );
-        require(_resetProposal(), "g1"); // failed cancel diamond cut
+    /*//////////////////////////////////////////////////////////////
+                            UPGRADE PROPOSING
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Propose a fully transparent upgrade, providing upgrade data on-chain
+    /// @notice The governor will be able to execute the proposal either
+    /// - With a `UPGRADE_NOTICE_PERIOD` timelock on its own
+    /// - With security council approvals instantly
+    /// @dev Only the current governor can propose an upgrade
+    /// @param _diamondCut The diamond cut parameters will be executed with the upgrade
+    function proposeTransparentUpgrade(Diamond.DiamondCutData calldata _diamondCut, uint40 _proposalId)
+        external
+        onlyGovernor
+        noUpgradeProposed
+    {
+        // Set the default value for proposal salt, since the proposal is fully transparent it doesn't change anything
+        bytes32 proposalSalt;
+        uint40 expectedProposalId = s.upgrades.currentProposalId + 1;
+        // Input proposal ID should be equal to the expected proposal id
+        require(_proposalId == expectedProposalId, "yb");
+        s.upgrades.proposedUpgradeHash = upgradeProposalHash(_diamondCut, expectedProposalId, proposalSalt);
+        s.upgrades.proposedUpgradeTimestamp = uint40(block.timestamp);
+        s.upgrades.currentProposalId = expectedProposalId;
+        s.upgrades.state = UpgradeState.Transparent;
+
+        emit ProposeTransparentUpgrade(_diamondCut, expectedProposalId, proposalSalt);
     }
 
-    /// @notice Executes a proposed governor upgrade. Only the current governor can execute the upgrade.
-    /// NOTE: Governor can execute diamond cut ONLY with proposed `facetCuts` and `initAddress`.
-    /// `initCalldata` can be arbitrarily.
-    function executeDiamondCutProposal(Diamond.DiamondCutData calldata _diamondCut) external onlyGovernor {
+    /// @notice Propose "shadow" upgrade, upgrade data is not publishing on-chain
+    /// @notice The governor will be able to execute the proposal only:
+    /// - With security council approvals instantly
+    /// @dev Only the current governor can propose an upgrade
+    /// @param _proposalHash Upgrade proposal hash (see `upgradeProposalHash` function)
+    /// @param _proposalId An expected value for the current proposal Id
+    function proposeShadowUpgrade(bytes32 _proposalHash, uint40 _proposalId) external onlyGovernor noUpgradeProposed {
+        require(_proposalHash != bytes32(0), "mi");
+
+        s.upgrades.proposedUpgradeHash = _proposalHash;
+        s.upgrades.proposedUpgradeTimestamp = uint40(block.timestamp); // Safe to cast
+        s.upgrades.state = UpgradeState.Shadow;
+
+        uint256 currentProposalId = s.upgrades.currentProposalId;
+        // Expected proposal ID should be one more than the current saved proposal ID value
+        require(_proposalId == currentProposalId.uncheckedInc(), "ya");
+        s.upgrades.currentProposalId = _proposalId;
+
+        emit ProposeShadowUpgrade(_proposalId, _proposalHash);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            UPGRADE CANCELING
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Cancel the proposed upgrade
+    /// @dev Only the current governor can remove the proposal
+    /// @param _proposedUpgradeHash Expected upgrade hash value to be canceled
+    function cancelUpgradeProposal(bytes32 _proposedUpgradeHash) external onlyGovernor upgradeProposed {
+        bytes32 currentUpgradeHash = s.upgrades.proposedUpgradeHash;
+        // Soft check that the governor is not mistaken about canceling proposals
+        require(_proposedUpgradeHash == currentUpgradeHash, "rx");
+
+        _resetProposal();
+        emit CancelUpgradeProposal(s.upgrades.currentProposalId, currentUpgradeHash);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            SECURITY COUNCIL
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Approves the instant upgrade by the security council
+    /// @param _upgradeProposalHash The upgrade proposal hash that security council members want to approve. Needed to prevent unintentional approvals, including reorg attacks
+    function securityCouncilUpgradeApprove(bytes32 _upgradeProposalHash) external onlySecurityCouncil upgradeProposed {
+        require(s.upgrades.proposedUpgradeHash == _upgradeProposalHash, "un");
+        s.upgrades.approvedBySecurityCouncil = true;
+
+        emit SecurityCouncilUpgradeApprove(s.upgrades.currentProposalId, _upgradeProposalHash);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            UPGRADE EXECUTION
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Executes a proposed governor upgrade
+    /// @dev Only the current governor can execute the upgrade
+    /// @param _diamondCut The diamond cut parameters to be executed
+    /// @param _proposalSalt The committed 32 bytes salt for upgrade proposal data
+    function executeUpgrade(Diamond.DiamondCutData calldata _diamondCut, bytes32 _proposalSalt) external onlyGovernor {
         Diamond.DiamondStorage storage diamondStorage = Diamond.getDiamondStorage();
 
-        bool approvedBySecurityCouncil = s.diamondCutStorage.securityCouncilEmergencyApprovals >=
-            SECURITY_COUNCIL_APPROVALS_FOR_EMERGENCY_UPGRADE;
+        bool approvedBySecurityCouncil = s.upgrades.approvedBySecurityCouncil;
+        UpgradeState upgradeState = s.upgrades.state;
+        if (upgradeState == UpgradeState.Transparent) {
+            bool upgradeNoticePeriodPassed = block.timestamp >=
+                s.upgrades.proposedUpgradeTimestamp + UPGRADE_NOTICE_PERIOD;
+            require(upgradeNoticePeriodPassed || approvedBySecurityCouncil, "va");
+            require(_proposalSalt == bytes32(0), "po"); // The transparent upgrade may be initiated only with zero salt
+        } else if (upgradeState == UpgradeState.Shadow) {
+            require(approvedBySecurityCouncil, "av");
+            require(_proposalSalt != bytes32(0), "op"); // Shadow upgrade should be initialized with "random" salt
+        } else {
+            revert("ab"); // There is no active upgrade
+        }
 
-        bool upgradeNoticePeriodPassed = block.timestamp >=
-            s.diamondCutStorage.proposedDiamondCutTimestamp + UPGRADE_NOTICE_PERIOD;
-
-        require(approvedBySecurityCouncil || upgradeNoticePeriodPassed, "a6"); // notice period should expire
         require(approvedBySecurityCouncil || !diamondStorage.isFrozen, "f3");
-        // should not be frozen or should have enough security council approvals
+        // Should not be frozen or should have enough security council approvals
 
-        require(
-            s.diamondCutStorage.proposedDiamondCutHash ==
-                keccak256(abi.encode(_diamondCut.facetCuts, _diamondCut.initAddress)),
-            "a4"
-        ); // proposal should be created
-
-        require(_resetProposal(), "a5"); // failed reset proposal
+        uint256 currentProposalId = s.upgrades.currentProposalId;
+        bytes32 executingProposalHash = upgradeProposalHash(_diamondCut, currentProposalId, _proposalSalt);
+        require(s.upgrades.proposedUpgradeHash == executingProposalHash, "a4"); // Proposal should be created
+        _resetProposal();
 
         if (diamondStorage.isFrozen) {
             diamondStorage.isFrozen = false;
-            emit Unfreeze(s.diamondCutStorage.lastDiamondFreezeTimestamp);
+            emit Unfreeze();
         }
 
         Diamond.diamondCut(_diamondCut);
-
-        emit DiamondCutProposalExecution(_diamondCut);
+        emit ExecuteUpgrade(currentProposalId, executingProposalHash, _proposalSalt);
     }
 
+    /*//////////////////////////////////////////////////////////////
+                            CONTRACT FREEZING
+    //////////////////////////////////////////////////////////////*/
+
     /// @notice Instantly pause the functionality of all freezable facets & their selectors
-    function emergencyFreezeDiamond() external onlyGovernor {
+    function freezeDiamond() external onlyGovernor {
         Diamond.DiamondStorage storage diamondStorage = Diamond.getDiamondStorage();
+
         require(!diamondStorage.isFrozen, "a9"); // diamond proxy is frozen already
         _resetProposal();
-
         diamondStorage.isFrozen = true;
-        // Limited-time freezing feature will be added in the future upgrades, so keeping this variable for simplification
-        s.diamondCutStorage.lastDiamondFreezeTimestamp = block.timestamp;
 
-        emit EmergencyFreeze();
+        emit Freeze();
     }
 
     /// @notice Unpause the functionality of all freezable facets & their selectors
@@ -94,46 +163,34 @@ contract DiamondCutFacet is Base, IDiamondCut {
         Diamond.DiamondStorage storage diamondStorage = Diamond.getDiamondStorage();
 
         require(diamondStorage.isFrozen, "a7"); // diamond proxy is not frozen
-
         _resetProposal();
-
         diamondStorage.isFrozen = false;
 
-        emit Unfreeze(s.diamondCutStorage.lastDiamondFreezeTimestamp);
+        emit Unfreeze();
     }
 
-    /// @notice Gives another approval for the instant upgrade (diamond cut) by the security council member
-    /// @param _diamondCutHash The hash of the diamond cut that security council members want to approve. Needed to prevent unintentional approvals, including reorg attacks
-    function approveEmergencyDiamondCutAsSecurityCouncilMember(bytes32 _diamondCutHash) external {
-        require(s.diamondCutStorage.securityCouncilMembers[msg.sender], "a9"); // not a security council member
-        uint256 currentProposalId = s.diamondCutStorage.currentProposalId;
-        require(s.diamondCutStorage.securityCouncilMemberLastApprovedProposalId[msg.sender] < currentProposalId, "ao"); // already approved this proposal
-        s.diamondCutStorage.securityCouncilMemberLastApprovedProposalId[msg.sender] = currentProposalId;
+    /*//////////////////////////////////////////////////////////////
+                            GETTERS & HELPERS
+    //////////////////////////////////////////////////////////////*/
 
-        require(s.diamondCutStorage.proposedDiamondCutTimestamp != 0, "f0"); // there is no proposed diamond cut
-        require(s.diamondCutStorage.proposedDiamondCutHash == _diamondCutHash, "f1"); // proposed diamond cut do not match to the approved
-        uint256 securityCouncilEmergencyApprovals = s.diamondCutStorage.securityCouncilEmergencyApprovals;
-        s.diamondCutStorage.securityCouncilEmergencyApprovals = securityCouncilEmergencyApprovals + 1;
-
-        emit EmergencyDiamondCutApproved(
-            msg.sender,
-            currentProposalId,
-            securityCouncilEmergencyApprovals,
-            _diamondCutHash
-        );
+    /// @notice Generate the upgrade proposal hash
+    /// @param _diamondCut The diamond cut parameters will be executed with the upgrade
+    /// @param _proposalId The current proposal ID, to set a unique upgrade hash depending on the upgrades order
+    /// @param _salt The arbitrary 32 bytes, primarily used in shadow upgrades to prevent guessing the upgrade proposal content by its hash
+    /// @return The upgrade proposal hash
+    function upgradeProposalHash(
+        Diamond.DiamondCutData calldata _diamondCut,
+        uint256 _proposalId,
+        bytes32 _salt
+    ) public pure returns (bytes32) {
+        return keccak256(abi.encode(_diamondCut, _proposalId, _salt));
     }
 
-    /// @dev Set up the proposed diamond cut state to the default values
-    /// @return Whether the proposal is reset or it was already empty
-    function _resetProposal() private returns (bool) {
-        if (s.diamondCutStorage.proposedDiamondCutTimestamp == 0) {
-            return false;
-        }
-
-        delete s.diamondCutStorage.proposedDiamondCutHash;
-        delete s.diamondCutStorage.proposedDiamondCutTimestamp;
-        delete s.diamondCutStorage.securityCouncilEmergencyApprovals;
-
-        return true;
+    /// @dev Set up the proposed upgrade state to the default values
+    function _resetProposal() internal {
+        delete s.upgrades.state;
+        delete s.upgrades.proposedUpgradeHash;
+        delete s.upgrades.proposedUpgradeTimestamp;
+        delete s.upgrades.approvedBySecurityCouncil;
     }
 }

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 
 pragma solidity ^0.8.0;
 
@@ -10,13 +10,13 @@ import "./interfaces/IImmutableSimulator.sol";
 import "./interfaces/IEthToken.sol";
 import "./interfaces/IL1Messenger.sol";
 import "./interfaces/ISystemContext.sol";
-import "./interfaces/IBootloaderUtilities.sol";
+import "./BootloaderUtilities.sol";
 
 /// @dev All the system contracts introduced by zkSync have their addresses
 /// started from 2^15 in order to avoid collision with Ethereum precompiles.
 uint160 constant SYSTEM_CONTRACTS_OFFSET = 0x8000; // 2^15
 
-/// @dev All the system contracts must be located in the kernel space, 
+/// @dev All the system contracts must be located in the kernel space,
 /// i.e. their addresses must be below 2^16.
 uint160 constant MAX_SYSTEM_CONTRACT_ADDRESS = 0xffff; // 2^16 - 1
 
@@ -24,10 +24,14 @@ address constant ECRECOVER_SYSTEM_CONTRACT = address(0x01);
 address constant SHA256_SYSTEM_CONTRACT = address(0x02);
 
 address payable constant BOOTLOADER_FORMAL_ADDRESS = payable(address(SYSTEM_CONTRACTS_OFFSET + 0x01));
-IAccountCodeStorage constant ACCOUNT_CODE_STORAGE_SYSTEM_CONTRACT = IAccountCodeStorage(address(SYSTEM_CONTRACTS_OFFSET + 0x02));
+IAccountCodeStorage constant ACCOUNT_CODE_STORAGE_SYSTEM_CONTRACT = IAccountCodeStorage(
+    address(SYSTEM_CONTRACTS_OFFSET + 0x02)
+);
 INonceHolder constant NONCE_HOLDER_SYSTEM_CONTRACT = INonceHolder(address(SYSTEM_CONTRACTS_OFFSET + 0x03));
 IKnownCodesStorage constant KNOWN_CODE_STORAGE_CONTRACT = IKnownCodesStorage(address(SYSTEM_CONTRACTS_OFFSET + 0x04));
-IImmutableSimulator constant IMMUTABLE_SIMULATOR_SYSTEM_CONTRACT = IImmutableSimulator(address(SYSTEM_CONTRACTS_OFFSET + 0x05));
+IImmutableSimulator constant IMMUTABLE_SIMULATOR_SYSTEM_CONTRACT = IImmutableSimulator(
+    address(SYSTEM_CONTRACTS_OFFSET + 0x05)
+);
 IContractDeployer constant DEPLOYER_SYSTEM_CONTRACT = IContractDeployer(address(SYSTEM_CONTRACTS_OFFSET + 0x06));
 
 // A contract that is allowed to deploy any codehash
@@ -42,15 +46,20 @@ address constant KECCAK256_SYSTEM_CONTRACT = address(SYSTEM_CONTRACTS_OFFSET + 0
 
 ISystemContext constant SYSTEM_CONTEXT_CONTRACT = ISystemContext(payable(address(SYSTEM_CONTRACTS_OFFSET + 0x0b)));
 
-IBootloaderUtilities constant BOOTLOADER_UTILITIES = IBootloaderUtilities(address(SYSTEM_CONTRACTS_OFFSET + 0x0c));
+BootloaderUtilities constant BOOTLOADER_UTILITIES = BootloaderUtilities(address(SYSTEM_CONTRACTS_OFFSET + 0x0c));
+
+address constant EVENT_WRITER_CONTRACT = address(SYSTEM_CONTRACTS_OFFSET + 0x0d);
 
 /// @dev The number of bytes that are published during the contract deployment
 /// in addition to the bytecode itself.
 uint256 constant BYTECODE_PUBLISHING_OVERHEAD = 100;
 
-/// @dev If the bitwise AND of the second extraAbi param when calling the MSG_VALUE_SIMULATOR
-/// is non-zero, the call will be assumed to be a system one. 
-uint256 constant MSG_VALUE_SIMULATOR_IS_SYSTEM_BIT = 2**128;
+/// @dev If the bitwise AND of the third extraAbi param when calling the MSG_VALUE_SIMULATOR
+/// is non-zero, the call will be assumed to be a system one.
+uint256 constant MSG_VALUE_SIMULATOR_IS_SYSTEM_BIT = 1;
+
+/// @dev The maximal msg.value that context can have
+uint256 constant MAX_MSG_VALUE = 2**128 - 1;
 
 /// @dev Prefix used during derivation of account addresses using CREATE2
 /// @dev keccak256("zksyncCreate2")
