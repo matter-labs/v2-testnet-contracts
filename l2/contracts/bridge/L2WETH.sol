@@ -46,7 +46,7 @@ contract L2WETH is ERC20PermitUpgradeable, IL2WETH, IL2StandardToken {
         // Set the name for EIP-712 signature.
         __ERC20Permit_init(name_);
 
-        emit BridgeInitialization(_l1Address, name_, symbol_, 18);
+        emit BridgeInitialize(_l1Address, name_, symbol_, 18);
     }
 
     /// @notice Function for minting tokens on L2, is implemented †o be compatible with StandardToken interface.
