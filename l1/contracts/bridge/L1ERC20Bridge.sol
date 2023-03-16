@@ -212,7 +212,10 @@ contract L1ERC20Bridge is IL1Bridge, IL1BridgeLegacy, AllowListed, ReentrancyGua
         // If the refund recipient is not specified, the refund will be sent to the sender of the transaction.
         // Otherwise, the refund will be sent to the specified address.
         // Please note, if the recipient is a contract (the only exception is a contracting contract, but it is shooting in the leg).
-        address refundRecipient = _refundRecipient == address(0) ? msg.sender : _refundRecipient;
+        address refundRecipient = _refundRecipient;
+        if (_refundRecipient == address(0)) {
+            refundRecipient = msg.sender != tx.origin ? AddressAliasHelper.applyL1ToL2Alias(msg.sender) : msg.sender;
+        }
         l2TxHash = zkSyncMailbox.requestL2Transaction{value: msg.value}(
             l2Bridge,
             0, // L2 msg.value
