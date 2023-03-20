@@ -152,8 +152,13 @@ contract GettersFacet is Base, IGetters {
     }
 
     /// @return The maximum number of L2 gas that a user can request for L1 -> L2 transactions
-    function getpriorityTxMaxGasLimit() external view returns (uint256) {
+    function getPriorityTxMaxGasLimit() external view returns (uint256) {
         return s.priorityTxMaxGasLimit;
+    }
+
+    /// @return The allow list smart contract
+    function getAllowList() external view returns (address) {
+        return address(s.allowList);
     }
 
     /// @return Whether the selector can be frozen by the governor or always accessible
