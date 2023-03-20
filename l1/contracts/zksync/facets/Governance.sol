@@ -108,6 +108,16 @@ contract GovernanceFacet is Base, IGovernance {
         emit NewVerifierParams(oldVerifierParams, _newVerifierParams);
     }
 
+    /// @notice Change the address of the allow list smart contract
+    /// @param _newAllowList Allow list smart contract address
+    function setAllowList(IAllowList _newAllowList) external onlyGovernor {
+        IAllowList oldAllowList = s.allowList;
+        if (oldAllowList != _newAllowList) {
+            s.allowList = _newAllowList;
+            emit NewAllowList(address(oldAllowList), address(_newAllowList));
+        }
+    }
+
     /// @notice Change the max L2 gas limit for L1 -> L2 transactions
     /// @param _newPriorityTxMaxGasLimit The maximum number of L2 gas that a user can request for L1 -> L2 transactions
     function setPriorityTxMaxGasLimit(uint256 _newPriorityTxMaxGasLimit) external onlyGovernor {
