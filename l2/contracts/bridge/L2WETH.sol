@@ -17,9 +17,6 @@ import "./interfaces/IL2StandardToken.sol";
 /// Note: This is an upgradeable contract. In the future, we will remove upgradeability to make it trustless.
 /// But for now, when the Rollup has instant upgradability, we leave the possibility of upgrading to improve the contract if needed.
 contract L2WETH is ERC20PermitUpgradeable, IL2WETH, IL2StandardToken {
-    /// @dev Address of the L1 WETH token. It can be deposited to mint this L2 token.
-    address public override l1Address;
-
     /// @dev Contract is expected to be used as proxy implementation.
     constructor() {
         // Disable initialization to prevent Parity hack.
@@ -28,25 +25,17 @@ contract L2WETH is ERC20PermitUpgradeable, IL2WETH, IL2StandardToken {
 
     /// @notice Initializes a contract token for later use. Expected to be used in the proxy.
     /// @dev Stores the L1 address of the bridge and set `name`/`symbol`/`decimals` getters.
-    /// @param _l1Address Address of the L1 token that can be deposited to mint this L2 WETH.
     /// @param name_ The name of the token.
     /// @param symbol_ The symbol of the token.
     /// Note: The decimals are hardcoded to 18, the same as on Ether.
-    function bridgeInitialize(
-        address _l1Address,
-        string memory name_,
-        string memory symbol_
-    ) external initializer {
-        require(_l1Address != address(0), "in6"); // Should be non-zero address
-        l1Address = _l1Address;
-
+    function initialize(string memory name_, string memory symbol_) external initializer {
         // Set decoded values for name and symbol.
         __ERC20_init_unchained(name_, symbol_);
 
         // Set the name for EIP-712 signature.
         __ERC20Permit_init(name_);
 
-        emit BridgeInitialize(_l1Address, name_, symbol_, 18);
+        emit Initialize(name_, symbol_, 18);
     }
 
     /// @notice Function for minting tokens on L2, is implemented †o be compatible with StandardToken interface.
@@ -64,12 +53,15 @@ contract L2WETH is ERC20PermitUpgradeable, IL2WETH, IL2StandardToken {
     /// @param _amount The amount that will be burned.
     /// @notice Should be called by the bridge before withdrawing tokens to L1.
     function bridgeBurn(address _from, uint256 _amount) external override {
-        // TODO: unlike the `bridgeMint` method, this should be implemented.
         revert("bridgeBurn is not implemented yet");
     }
 
     function l2Bridge() external view returns (address) {
         revert("l2Bridge is not implemented yet");
+    }
+
+    function l1Address() external view returns (address) {
+        revert("l1Address is not implemented yet");
     }
 
     /// @notice Deposit Ether to mint WETH.

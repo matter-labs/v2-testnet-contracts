@@ -3,6 +3,8 @@
 pragma solidity ^0.8.0;
 
 interface IL2WETH {
+    event Initialize(string name, string symbol, uint8 decimals);
+
     function deposit() external payable;
 
     function withdraw(uint256 _amount) external;

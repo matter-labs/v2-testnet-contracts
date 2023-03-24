@@ -1,5 +1,7 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity >=0.8.0;
+
+import "./EfficientCall.sol";
 
 /**
  * @author Matter Labs
@@ -11,7 +13,7 @@ library Utils {
         0x00ff000000000000000000000000000000000000000000000000000000000000;
 
     /// @dev Bit mask to set the "isConstructor" marker in the bytecode hash
-    bytes32 constant SET_IS_CONSTRUCTOR_MARKER_BIT_MASK = 
+    bytes32 constant SET_IS_CONSTRUCTOR_MARKER_BIT_MASK =
         0x0001000000000000000000000000000000000000000000000000000000000000;
 
     function safeCastToU128(uint256 _x) internal pure returns (uint128) {
@@ -44,8 +46,13 @@ library Utils {
         }
     }
 
+    /// @notice Denotes whether bytecode hash corresponds to a contract that already constructed
+    function isContractConstructed(bytes32 _bytecodeHash) internal pure returns (bool) {
+        return _bytecodeHash[1] == 0x00;
+    }
+
     /// @notice Denotes whether bytecode hash corresponds to a contract that is on constructor or has already been constructed
-    function isContractConsructing(bytes32 _bytecodeHash) internal pure returns (bool) {
+    function isContractConstructing(bytes32 _bytecodeHash) internal pure returns (bool) {
         return _bytecodeHash[1] == 0x01;
     }
 
@@ -62,5 +69,28 @@ library Utils {
     /// @return The bytecode hash with "isConstructor" flag set to FALSE
     function constructedBytecodeHash(bytes32 _bytecodeHash) internal pure returns (bytes32) {
         return _bytecodeHash & ~IS_CONSTRUCTOR_BYTECODE_HASH_BIT_MASK;
+    }
+
+    /// @notice Validate the bytecode format and calculate its hash.
+    /// @param _bytecode The bytecode to hash.
+    /// @return hashedBytecode The 32-byte hash of the bytecode.
+    /// Note: The function reverts the execution if the bytecode has non expected format:
+    /// - Bytecode bytes length is not a multiple of 32
+    /// - Bytecode bytes length is not less than 2^21 bytes (2^16 words)
+    /// - Bytecode words length is not odd
+    function hashL2Bytecode(bytes calldata _bytecode) internal view returns (bytes32 hashedBytecode) {
+        // Note that the length of the bytecode must be provided in 32-byte words.
+        require(_bytecode.length % 32 == 0, "po");
+
+        uint256 bytecodeLenInWords = _bytecode.length / 32;
+        require(bytecodeLenInWords < 2 ** 16, "pp"); // bytecode length must be less than 2^16 words
+        require(bytecodeLenInWords % 2 == 1, "pr"); // bytecode length in words must be odd
+        hashedBytecode =
+            EfficientCall.sha(_bytecode) &
+            0x00000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
+        // Setting the version of the hash
+        hashedBytecode = (hashedBytecode | bytes32(uint256(1 << 248)));
+        // Setting the length
+        hashedBytecode = hashedBytecode | bytes32(bytecodeLenInWords << 224);
     }
 }
