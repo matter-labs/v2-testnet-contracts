@@ -5,6 +5,7 @@ pragma solidity ^0.8.0;
 import "./interfaces/IBootloaderUtilities.sol";
 import "./libraries/TransactionHelper.sol";
 import "./libraries/RLPEncoder.sol";
+import "./libraries/EfficientCall.sol";
 
 /**
  * @author Matter Labs
@@ -24,7 +25,7 @@ contract BootloaderUtilities is IBootloaderUtilities {
     ) external view override returns (bytes32 txHash, bytes32 signedTxHash) {
         signedTxHash = _transaction.encodeHash();
         if (_transaction.txType == EIP_712_TX_TYPE) {
-            txHash = keccak256(bytes.concat(signedTxHash, keccak256(_transaction.signature)));
+            txHash = keccak256(bytes.concat(signedTxHash, EfficientCall.keccak(_transaction.signature)));
         } else if (_transaction.txType == LEGACY_TX_TYPE) {
             txHash = encodeLegacyTransactionHash(_transaction);
         } else if (_transaction.txType == EIP_1559_TX_TYPE) {
@@ -89,7 +90,7 @@ contract BootloaderUtilities is IBootloaderUtilities {
             uint256 vInt = uint256(uint8(_transaction.signature[64]));
             require(vInt == 27 || vInt == 28, "Invalid v value");
 
-            // If the `chainId` is specified in the transaction, then the `v` value is encoded as 
+            // If the `chainId` is specified in the transaction, then the `v` value is encoded as
             // `35 + y + 2 * chainId == vInt + 8 + 2 * chainId`, where y - parity bit (see EIP-155).
             if (_transaction.reserved[0] != 0) {
                 vInt += 8 + block.chainid * 2;
@@ -111,7 +112,7 @@ contract BootloaderUtilities is IBootloaderUtilities {
                 vEncoded.length;
 
             // Safe cast, because the length of the list can't be so large.
-            encodedListLength = RLPEncoder.encodeListLen(uint64(listLength)); 
+            encodedListLength = RLPEncoder.encodeListLen(uint64(listLength));
         }
 
         return
