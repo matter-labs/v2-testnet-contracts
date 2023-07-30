@@ -8,36 +8,30 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IL1BridgeLegacy.sol";
 import "./interfaces/IL1Bridge.sol";
 import "./interfaces/IL2Bridge.sol";
+import "./interfaces/IL2ERC20Bridge.sol";
 
-import "../zksync/interfaces/IMailbox.sol";
-import "../common/interfaces/IL2ContractDeployer.sol";
+import "./libraries/BridgeInitializationHelper.sol";
+
+import "../zksync/interfaces/IZkSync.sol";
 import "../common/interfaces/IAllowList.sol";
 import "../common/AllowListed.sol";
 import "../common/libraries/UnsafeBytes.sol";
 import "../common/libraries/L2ContractHelper.sol";
-import "../common/L2ContractAddresses.sol";
 import "../common/ReentrancyGuard.sol";
 import "../vendor/AddressAliasHelper.sol";
 
 /// @author Matter Labs
-/// @notice Smart contract that allows depositing ERC20 tokens from Ethereum to zkSync v2.0
+/// @notice Smart contract that allows depositing ERC20 tokens from Ethereum to zkSync Era
 /// @dev It is standard implementation of ERC20 Bridge that can be used as a reference
 /// for any other custom token bridges.
 contract L1ERC20Bridge is IL1Bridge, IL1BridgeLegacy, AllowListed, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     /// @dev The smart contract that manages the list with permission to call contract functions
-    IAllowList immutable allowList;
+    IAllowList internal immutable allowList;
 
     /// @dev zkSync smart contract that is used to operate with L2 via asynchronous L2 <-> L1 communication
-    IMailbox immutable zkSyncMailbox;
-
-    /// @dev The L2 gas limit for requesting L1 -> L2 transaction of deploying L2 bridge instance
-    /// NOTE: this constant will be accurately calculated in the future.
-    uint256 constant DEPLOY_L2_BRIDGE_COUNTERPART_GAS_LIMIT = 10000000;
-
-    /// @dev The default l2GasPricePerPubdata to be used in bridges.
-    uint256 constant REQUIRED_L2_GAS_PRICE_PER_PUBDATA = 800;
+    IZkSync internal immutable zkSync;
 
     /// @dev A mapping L2 block number => message number => flag
     /// @dev Used to indicate that zkSync L2 -> L1 message was already processed
@@ -45,12 +39,12 @@ contract L1ERC20Bridge is IL1Bridge, IL1BridgeLegacy, AllowListed, ReentrancyGua
 
     /// @dev A mapping account => L1 token address => L2 deposit transaction hash => amount
     /// @dev Used for saving the number of deposited funds, to claim them in case the deposit transaction will fail
-    mapping(address => mapping(address => mapping(bytes32 => uint256))) depositAmount;
+    mapping(address => mapping(address => mapping(bytes32 => uint256))) internal depositAmount;
 
     /// @dev The address of deployed L2 bridge counterpart
     address public l2Bridge;
 
-    /// @dev The address of the factory that deploys proxy for L2 tokens
+    /// @dev The address that acts as a beacon for L2 tokens
     address public l2TokenBeacon;
 
     /// @dev The bytecode hash of the L2 token contract
@@ -67,8 +61,8 @@ contract L1ERC20Bridge is IL1Bridge, IL1BridgeLegacy, AllowListed, ReentrancyGua
 
     /// @dev Contract is expected to be used as proxy implementation.
     /// @dev Initialize the implementation to prevent Parity hack.
-    constructor(IMailbox _mailbox, IAllowList _allowList) reentrancyGuardInitializer {
-        zkSyncMailbox = _mailbox;
+    constructor(IZkSync _zkSync, IAllowList _allowList) reentrancyGuardInitializer {
+        zkSync = _zkSync;
         allowList = _allowList;
     }
 
@@ -82,6 +76,8 @@ contract L1ERC20Bridge is IL1Bridge, IL1BridgeLegacy, AllowListed, ReentrancyGua
     /// @notice At the time of the function call, it is not yet deployed in L2, but knowledge of its address
     /// @notice is necessary for determining L2 token address by L1 address, see `l2TokenAddress(address)` function
     /// @param _governor Address which can change L2 token implementation and upgrade the bridge
+    /// @param _deployBridgeImplementationFee How much of the sent value should be allocated to deploying the L2 bridge implementation
+    /// @param _deployBridgeProxyFee How much of the sent value should be allocated to deploying the L2 bridge proxy
     function initialize(
         bytes[] calldata _factoryDeps,
         address _l2TokenBeacon,
@@ -102,7 +98,8 @@ contract L1ERC20Bridge is IL1Bridge, IL1BridgeLegacy, AllowListed, ReentrancyGua
         bytes32 l2BridgeProxyBytecodeHash = L2ContractHelper.hashL2Bytecode(_factoryDeps[1]);
 
         // Deploy L2 bridge implementation contract
-        address bridgeImplementationAddr = _requestDeployTransaction(
+        address bridgeImplementationAddr = BridgeInitializationHelper.requestDeployTransaction(
+            zkSync,
             _deployBridgeImplementationFee,
             l2BridgeImplementationBytecodeHash,
             "", // Empty constructor data
@@ -114,53 +111,19 @@ contract L1ERC20Bridge is IL1Bridge, IL1BridgeLegacy, AllowListed, ReentrancyGua
         {
             // Data to be used in delegate call to initialize the proxy
             bytes memory proxyInitializationParams = abi.encodeCall(
-                IL2Bridge.initialize,
+                IL2ERC20Bridge.initialize,
                 (address(this), l2TokenProxyBytecodeHash, _governor)
             );
             l2BridgeProxyConstructorData = abi.encode(bridgeImplementationAddr, _governor, proxyInitializationParams);
         }
 
         // Deploy L2 bridge proxy contract
-        l2Bridge = _requestDeployTransaction(
+        l2Bridge = BridgeInitializationHelper.requestDeployTransaction(
+            zkSync,
             _deployBridgeProxyFee,
             l2BridgeProxyBytecodeHash,
             l2BridgeProxyConstructorData,
             new bytes[](0) // No factory deps are needed for L2 bridge proxy, because it is already passed in previous step
-        );
-    }
-
-    /// @notice Requests L2 transaction that will deploy a contract with a given bytecode hash and constructor data.
-    /// NOTE: it is always use deploy via create2 with ZERO salt
-    /// @param _deployTransactionFee The fee that will be paid for the L1 -> L2 transaction
-    /// @param _bytecodeHash The hash of the bytecode of the contract to be deployed
-    /// @param _constructorData The data to be passed to the contract constructor
-    /// @param _factoryDeps A list of raw bytecodes that are needed for deployment
-    function _requestDeployTransaction(
-        uint256 _deployTransactionFee,
-        bytes32 _bytecodeHash,
-        bytes memory _constructorData,
-        bytes[] memory _factoryDeps
-    ) internal returns (address deployedAddress) {
-        bytes memory deployCalldata = abi.encodeCall(
-            IL2ContractDeployer.create2,
-            (bytes32(0), _bytecodeHash, _constructorData)
-        );
-        zkSyncMailbox.requestL2Transaction{value: _deployTransactionFee}(
-            L2_DEPLOYER_SYSTEM_CONTRACT_ADDR,
-            0,
-            deployCalldata,
-            DEPLOY_L2_BRIDGE_COUNTERPART_GAS_LIMIT,
-            REQUIRED_L2_GAS_PRICE_PER_PUBDATA,
-            _factoryDeps,
-            msg.sender
-        );
-
-        deployedAddress = L2ContractHelper.computeCreate2Address(
-            // Apply the alias to the address of the bridge contract, to get the `msg.sender` in L2.
-            AddressAliasHelper.applyL1ToL2Alias(address(this)),
-            bytes32(0), // Zero salt
-            _bytecodeHash,
-            keccak256(_constructorData)
         );
     }
 
@@ -173,7 +136,7 @@ contract L1ERC20Bridge is IL1Bridge, IL1BridgeLegacy, AllowListed, ReentrancyGua
     /// @param _l2TxGasLimit The L2 gas limit to be used in the corresponding L2 transaction
     /// @param _l2TxGasPerPubdataByte The gasPerPubdataByteLimit to be used in the corresponding L2 transaction
     /// @return l2TxHash The L2 transaction hash of deposit finalization
-    /// NOTE: the function doesn't use `nonreentrant` and `senderCanCallFunction` modifiers, because the inner method do.
+    /// NOTE: the function doesn't use `nonreentrant` and `senderCanCallFunction` modifiers, because the inner method does.
     function deposit(
         address _l2Receiver,
         address _l1Token,
@@ -191,8 +154,16 @@ contract L1ERC20Bridge is IL1Bridge, IL1BridgeLegacy, AllowListed, ReentrancyGua
     /// @param _amount The total amount of tokens to be bridged
     /// @param _l2TxGasLimit The L2 gas limit to be used in the corresponding L2 transaction
     /// @param _l2TxGasPerPubdataByte The gasPerPubdataByteLimit to be used in the corresponding L2 transaction
-    /// @param _refundRecipient The address on L2 that will receive the refund for the transaction. If the transaction fails,
-    /// it will also be the address to receive `_l2Value`. If zero, the refund will be sent to the sender of the transaction.
+    /// @param _refundRecipient The address on L2 that will receive the refund for the transaction.
+    /// @dev If the L2 deposit finalization transaction fails, the `_refundRecipient` will receive the `_l2Value`.
+    /// Please note, the contract may change the refund recipient's address to eliminate sending funds to addresses out of control.
+    /// - If `_refundRecipient` is a contract on L1, the refund will be sent to the aliased `_refundRecipient`.
+    /// - If `_refundRecipient` is set to `address(0)` and the sender has NO deployed bytecode on L1, the refund will be sent to the `msg.sender` address.
+    /// - If `_refundRecipient` is set to `address(0)` and the sender has deployed bytecode on L1, the refund will be sent to the aliased `msg.sender` address.
+    /// @dev The address aliasing of L1 contracts as refund recipient on L2 is necessary to guarantee that the funds are controllable through the Mailbox,
+    /// since the Mailbox applies address aliasing to the from address for the L2 tx if the L1 msg.sender is a contract.
+    /// Without address aliasing for L1 contracts as refund recipients they would not be able to make proper L2 tx requests
+    /// through the Mailbox to use or withdraw the funds from L2, and the funds would be lost.
     /// @return l2TxHash The L2 transaction hash of deposit finalization
     function deposit(
         address _l2Receiver,
@@ -211,12 +182,12 @@ contract L1ERC20Bridge is IL1Bridge, IL1BridgeLegacy, AllowListed, ReentrancyGua
         bytes memory l2TxCalldata = _getDepositL2Calldata(msg.sender, _l2Receiver, _l1Token, amount);
         // If the refund recipient is not specified, the refund will be sent to the sender of the transaction.
         // Otherwise, the refund will be sent to the specified address.
-        // Please note, if the recipient is a contract (the only exception is a contracting contract, but it is shooting in the leg).
+        // If the recipient is a contract on L1, the address alias will be applied.
         address refundRecipient = _refundRecipient;
         if (_refundRecipient == address(0)) {
             refundRecipient = msg.sender != tx.origin ? AddressAliasHelper.applyL1ToL2Alias(msg.sender) : msg.sender;
         }
-        l2TxHash = zkSyncMailbox.requestL2Transaction{value: msg.value}(
+        l2TxHash = zkSync.requestL2Transaction{value: msg.value}(
             l2Bridge,
             0, // L2 msg.value
             l2TxCalldata,
@@ -286,7 +257,7 @@ contract L1ERC20Bridge is IL1Bridge, IL1BridgeLegacy, AllowListed, ReentrancyGua
         uint16 _l2TxNumberInBlock,
         bytes32[] calldata _merkleProof
     ) external nonReentrant senderCanCallFunction(allowList) {
-        bool proofValid = zkSyncMailbox.proveL1ToL2TransactionStatus(
+        bool proofValid = zkSync.proveL1ToL2TransactionStatus(
             _l2TxHash,
             _l2BlockNumber,
             _l2MessageIndex,
@@ -333,12 +304,7 @@ contract L1ERC20Bridge is IL1Bridge, IL1BridgeLegacy, AllowListed, ReentrancyGua
         (address l1Receiver, address l1Token, uint256 amount) = _parseL2WithdrawalMessage(l2ToL1Message.data);
         // Preventing the stack too deep error
         {
-            bool success = zkSyncMailbox.proveL2MessageInclusion(
-                _l2BlockNumber,
-                _l2MessageIndex,
-                l2ToL1Message,
-                _merkleProof
-            );
+            bool success = zkSync.proveL2MessageInclusion(_l2BlockNumber, _l2MessageIndex, l2ToL1Message, _merkleProof);
             require(success, "nq");
         }
 

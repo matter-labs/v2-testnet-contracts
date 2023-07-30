@@ -8,7 +8,8 @@ import {CREATE2_PREFIX, CREATE_PREFIX, NONCE_HOLDER_SYSTEM_CONTRACT, ACCOUNT_COD
 
 import "./libraries/Utils.sol";
 import "./libraries/EfficientCall.sol";
-import {SystemContractHelper, ISystemContract} from "./libraries/SystemContractHelper.sol";
+import {SystemContractHelper} from "./libraries/SystemContractHelper.sol";
+import "./interfaces/ISystemContract.sol";
 
 /**
  * @author Matter Labs
@@ -256,7 +257,7 @@ contract ContractDeployer is IContractDeployer, ISystemContract {
         AccountAbstractionVersion _aaVersion,
         bytes calldata _input
     ) internal {
-        require(_bytecodeHash != bytes32(0x0), "BytecodeHash can not be zero");
+        require(_bytecodeHash != bytes32(0x0), "BytecodeHash cannot be zero");
         require(uint160(_newAddress) > MAX_SYSTEM_CONTRACT_ADDRESS, "Can not deploy contracts in kernel space");
 
         // We do not allow deploying twice on the same address.
