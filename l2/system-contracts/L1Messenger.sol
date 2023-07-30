@@ -44,7 +44,7 @@ contract L1Messenger is IL1Messenger {
             precompileParams,
             Utils.safeCastToU32(gasToPay)
         );
-        require(precompileCallSuccess);
+        require(precompileCallSuccess, "Failed to burn gas");
 
         SystemContractHelper.toL1(true, bytes32(uint256(uint160(msg.sender))), hash);
 

@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 
 pragma solidity ^0.8.13;
-import "../libraries/Diamond.sol";
 
-interface IDiamondCut {
+import "../libraries/Diamond.sol";
+import "./IBase.sol";
+
+interface IDiamondCut is IBase {
     function proposeTransparentUpgrade(Diamond.DiamondCutData calldata _diamondCut, uint40 _proposalId) external;
 
     function proposeShadowUpgrade(bytes32 _proposalHash, uint40 _proposalId) external;
