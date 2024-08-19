@@ -1,5 +1,8 @@
 {
   "name": "@matterlabs/zksync-contracts",
   "version": "0.6.1",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "hardhat": "=2.22.2"
+  }
 }
