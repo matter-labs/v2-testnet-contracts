@@ -3,7 +3,7 @@ on: [pull_request]
 jobs:
   hardhat-ci:
     name: Hardhat CI
-    uses: ./.github/workflows/hardhat-ci
+    uses: ./.github/workflows/hardhat-ci.yaml
   foundry-ci:
     name: Foundry CI
-    uses: ./.github/workflows/foundry-ci
+    uses: ./.github/workflows/foundry-ci.yaml
