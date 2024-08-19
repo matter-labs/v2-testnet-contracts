@@ -2,7 +2,7 @@ name: Foundry CI
 on: [workflow_call]
 jobs:
   build-l1:
-    name: Build L1 Contracts
+    name: Build L1
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,7 +15,7 @@ jobs:
       - run: forge build --contracts contracts/l1-contracts
 
   build-l2:
-    name: Build L2 Contracts
+    name: Build L2
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
