@@ -19,7 +19,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 18.18.0
-          cache: yarns
+          cache: yarn
       - run: yarn
       - run: HARDHAT_CONTRACTS_PATH=contracts/l2-contracts yarn hardhat compile
 
