@@ -4,5 +4,9 @@
   "license": "MIT",
   "devDependencies": {
     "hardhat": "=2.22.2"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts-upgradeable-v4": "npm:@openzeppelin/contracts-upgradeable@4.9.5",
+    "@openzeppelin/contracts-v4": "npm:@openzeppelin/contracts@4.9.5"
   }
 }
