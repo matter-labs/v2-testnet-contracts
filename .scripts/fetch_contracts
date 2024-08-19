@@ -2,7 +2,7 @@
 
 # Define the repository URL and branch/tag/commit to fetch
 REPO_URL="https://github.com/matter-labs/era-contracts.git"
-BRANCH_TAG_COMMIT="main"
+BRANCH_TAG_COMMIT="protocol-defense"
 
 # Define the destination directory and a temporary directory for the clone
 DEST_DIR="$(pwd)/contracts"
@@ -32,8 +32,31 @@ fi
 
 # Set up sparse checkout and fetch only the contracts directories
 git sparse-checkout init --cone > /dev/null 2>&1
-git sparse-checkout set l1-contracts/contracts l2-contracts/contracts system-contracts/contracts > /dev/null 2>&1
+# For system-contracts we need to fetch the whole directory for preprocessing
+git sparse-checkout set l1-contracts/contracts l2-contracts/contracts system-contracts > /dev/null 2>&1
 git checkout > /dev/null 2>&1
+
+# Preprocess the system contracts. It needs to be executed in the system-contracts subdirectory of the repository. The
+# templates are in the `contracts` directory and preprocessed contracts are in the `contracts-preprocessed` directory.
+preprocess_system_contracts() {
+    # Install dependencies
+    yarn
+
+    # Preprocess the contracts
+    yarn build
+
+    # Remove artifacts
+    find . -type d -name "artifacts" -exec rm -rf {} +
+
+    # Replace `contracts` with `contracts-preprocessed`
+    rm -rf contracts
+    mv contracts-preprocessed contracts
+}
+
+# Preprocess the system contracts
+cd "$TEMP_DIR"/system-contracts
+preprocess_system_contracts
+cd "$TEMP_DIR"
 
 # Function to compare directories and sync if differences are found
 check_and_sync() {
