@@ -3,3 +3,7 @@ node_modules
 # Hardhat
 /cache
 /artifacts
+
+# Foundry
+/out
+/cache_forge
