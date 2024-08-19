@@ -1,7 +1,8 @@
 name: Hardhat CI
-on: [pull_request]
+on: [workflow_call]
 jobs:
   build-l1:
+    name: Build L1 Contracts
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -13,6 +14,7 @@ jobs:
       - run: HARDHAT_CONTRACTS_PATH=contracts/l1-contracts yarn hardhat compile
 
   build-l2:
+    name: Build L2 Contracts
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,6 +26,7 @@ jobs:
       - run: HARDHAT_CONTRACTS_PATH=contracts/l2-contracts yarn hardhat compile
 
   build-sc:
+    name: Build System Contracts
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
