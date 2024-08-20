@@ -1,2 +1,2 @@
-"@openzeppelin/contracts-v4/=node_modules/@openzeppelin/contracts-v4/"
-"@openzeppelin/contracts-upgradeable-v4/=node_modules/@openzeppelin/contracts-upgradeable-v4/"
+@openzeppelin/contracts-v4/=lib/openzeppelin-contracts-v4/contracts/
+@openzeppelin/contracts-upgradeable-v4/=lib/openzeppelin-contracts-upgradeable-v4/contracts/

@@ -6,4 +6,4 @@ optimizer-runs = 9999999
 src = 'contracts'
 out = 'out'
 cache_path = 'cache_forge'
-libs = ['node_modules']
+libs = ["lib"]
