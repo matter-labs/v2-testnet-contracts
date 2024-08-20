@@ -6,12 +6,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 18.18.0
-          cache: yarn
+      - with:
+          submodules: recursive
       - uses: foundry-rs/foundry-toolchain@v1
-      - run: yarn
       - run: forge build --contracts contracts/l1-contracts
 
   build-l2:
@@ -19,10 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 18.18.0
-          cache: yarn
+      - with:
+          submodules: recursive
       - uses: foundry-rs/foundry-toolchain@v1
-      - run: yarn
       - run: forge build --contracts contracts/l2-contracts
