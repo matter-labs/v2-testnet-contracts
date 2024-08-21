@@ -1,8 +1,30 @@
 #!/bin/bash
 
+# Initialize variable
+BRANCH_TAG_COMMIT=""
+
+# Parse the single input argument
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --ref)
+      BRANCH_TAG_COMMIT="$2"
+      shift 2
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      echo "Usage: $0 --ref branch|tag|commit" >&2
+      exit 1
+      ;;
+  esac
+done
+
+# Check if the ref is set
+if [ -z "$BRANCH_TAG_COMMIT" ]; then
+  echo "Usage: $0 --ref branch|tag|commit" >&2
+  exit 1
+fi
 # Define the repository URL and branch/tag/commit to fetch
 REPO_URL="https://github.com/matter-labs/era-contracts.git"
-BRANCH_TAG_COMMIT="dev"
 
 # Define the destination directory and a temporary directory for the clone
 DEST_DIR="$(pwd)/contracts"
@@ -92,7 +114,7 @@ if [ $DIFF_FOUND -eq 1 ]; then
     # Clean up and commit the changes
     cd "$(dirname "$DEST_DIR")"
     git add contracts
-    git commit -m "Added contracts from $REPO_URL ($COMMIT_HASH_MESSAGE_MESSAGE)" > /dev/null
+    git commit -m "Updated contracts ($COMMIT_HASH_MESSAGE_MESSAGE)" > /dev/null
     echo "Contracts fetched, committed, and added to the destination repository from $REPO_URL ($COMMIT_HASH_MESSAGE_MESSAGE)"
 else
     echo "No changes detected, contracts are up to date. The script will exit without copying or committing."
