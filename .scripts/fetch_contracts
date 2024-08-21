@@ -1,8 +1,30 @@
 #!/bin/bash
 
-# Define the repository URL and branch/tag/commit to fetch
+# Define the repository URL
 REPO_URL="https://github.com/matter-labs/era-contracts.git"
-BRANCH_TAG_COMMIT="protocol-defense"
+
+# Branch/tag/commit to fetch
+BRANCH_TAG_COMMIT=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --ref)
+        BRANCH_TAG_COMMIT="$2"
+        shift 2
+        ;;
+    *)
+        echo "Unknown option: $1" >&2
+        echo "Usage: $0 --ref branch|tag|commit of $REPO_URL" >&2
+        exit 1
+        ;;
+    esac
+done
+
+# Check if the ref is set
+if [ -z "$BRANCH_TAG_COMMIT" ]; then
+    echo "Usage: $0 --ref branch|tag|commit of $REPO_URL" >&2
+    exit 1
+fi
 
 # Define the destination directory and a temporary directory for the clone
 DEST_DIR="$(pwd)/contracts"
@@ -12,11 +34,11 @@ TEMP_DIR=$(mktemp -d)
 mkdir -p "$DEST_DIR/l1-contracts" "$DEST_DIR/l2-contracts" "$DEST_DIR/system-contracts"
 
 # Clone the repository without checking out files
-git clone --no-checkout "$REPO_URL" "$TEMP_DIR" > /dev/null 2>&1
+git clone --no-checkout "$REPO_URL" "$TEMP_DIR" >/dev/null 2>&1
 
 # Navigate to the temporary directory and checkout the desired branch/tag/commit
 cd "$TEMP_DIR"
-git checkout "$BRANCH_TAG_COMMIT" > /dev/null 2>&1
+git checkout "$BRANCH_TAG_COMMIT" >/dev/null 2>&1
 
 # Capture the commit hash
 COMMIT_HASH=$(git rev-parse HEAD)
@@ -31,10 +53,10 @@ else
 fi
 
 # Set up sparse checkout and fetch only the contracts directories
-git sparse-checkout init --cone > /dev/null 2>&1
+git sparse-checkout init --cone >/dev/null 2>&1
 # For system-contracts we need to fetch the whole directory for preprocessing
-git sparse-checkout set l1-contracts/contracts l2-contracts/contracts system-contracts > /dev/null 2>&1
-git checkout > /dev/null 2>&1
+git sparse-checkout set l1-contracts/contracts l2-contracts/contracts system-contracts >/dev/null 2>&1
+git checkout >/dev/null 2>&1
 
 # Preprocess the system contracts. It needs to be executed in the system-contracts subdirectory of the repository. The
 # templates are in the `contracts` directory and preprocessed contracts are in the `contracts-preprocessed` directory.
@@ -62,9 +84,9 @@ cd "$TEMP_DIR"
 check_and_sync() {
     local src_dir="$1"
     local dest_dir="$2"
-    
+
     # Use rsync to check for differences (dry run), and fallback to diff if necessary
-    if ! rsync -acn --delete "$src_dir/" "$dest_dir/" | grep -q . && diff -qr "$src_dir" "$dest_dir" > /dev/null; then
+    if ! rsync -acn --delete "$src_dir/" "$dest_dir/" | grep -q . && diff -qr "$src_dir" "$dest_dir" >/dev/null; then
         echo "No differences detected between $src_dir and $dest_dir"
         return 0
     else
@@ -88,11 +110,11 @@ if [ $DIFF_FOUND -eq 1 ]; then
         rm -rf "$DEST_DIR/$dir/*"
         rsync -ac --delete "$dir/contracts/" "$DEST_DIR/$dir/"
     done
-    
+
     # Clean up and commit the changes
     cd "$(dirname "$DEST_DIR")"
     git add contracts
-    git commit -m "Added contracts from $REPO_URL ($COMMIT_HASH_MESSAGE_MESSAGE)" > /dev/null
+    git commit -m "Updated contracts ($COMMIT_HASH_MESSAGE_MESSAGE)" >/dev/null
     echo "Contracts fetched, committed, and added to the destination repository from $REPO_URL ($COMMIT_HASH_MESSAGE_MESSAGE)"
 else
     echo "No changes detected, contracts are up to date. The script will exit without copying or committing."
