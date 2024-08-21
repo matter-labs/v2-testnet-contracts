@@ -1,0 +1,41 @@
+name: Update Contracts
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or commit of https://github.com/matter-labs/era-contracts to fetch contracts from"
+        type: string
+        required: true
+        default: "dev"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-contracts:
+    name: Update Contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18.18.0
+          cache: yarn
+
+      - name: fetch contracts from the given ref
+        run: .scripts/fetch_contracts --ref ${{ inputs.ref }}
+
+      - name: create a new branch
+        run: git checkout -b contracts-update-${{ inputs.ref }}-$(date +%Y%m%d%H%M%S)
+
+      - name: push the new branch to the repository
+        run: git push origin HEAD
+
+      - name: create a pull request
+        run: |
+          gh pr create \
+            --title "$(git log -1 --pretty=%B)" \
+            --body "Updates contracts from https://github.com/matter-labs/era-contracts/tree/${{ inputs.ref }}" \
+            --base main \
+            --head $(git rev-parse --abbrev-ref HEAD)
