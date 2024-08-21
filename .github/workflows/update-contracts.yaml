@@ -6,7 +6,6 @@ on:
         description: "Branch, tag or commit of https://github.com/matter-labs/era-contracts to fetch contracts from"
         type: string
         required: true
-        default: "dev"
 
 permissions:
   contents: write
