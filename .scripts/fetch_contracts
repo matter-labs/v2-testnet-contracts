@@ -1,9 +1,11 @@
 #!/bin/bash
 
-# Initialize variable
+# Define the repository URL
+REPO_URL="https://github.com/matter-labs/era-contracts.git"
+
+# Branch/tag/commit to fetch
 BRANCH_TAG_COMMIT=""
 
-# Parse the single input argument
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --ref)
@@ -12,7 +14,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     *)
       echo "Unknown option: $1" >&2
-      echo "Usage: $0 --ref branch|tag|commit" >&2
+      echo "Usage: $0 --ref branch|tag|commit of $REPO_URL" >&2
       exit 1
       ;;
   esac
@@ -20,11 +22,9 @@ done
 
 # Check if the ref is set
 if [ -z "$BRANCH_TAG_COMMIT" ]; then
-  echo "Usage: $0 --ref branch|tag|commit" >&2
+  echo "Usage: $0 --ref branch|tag|commit of $REPO_URL" >&2
   exit 1
 fi
-# Define the repository URL and branch/tag/commit to fetch
-REPO_URL="https://github.com/matter-labs/era-contracts.git"
 
 # Define the destination directory and a temporary directory for the clone
 DEST_DIR="$(pwd)/contracts"
