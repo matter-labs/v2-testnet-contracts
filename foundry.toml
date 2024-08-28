@@ -1,0 +1,9 @@
+[profile.default]
+auto_detect_solc = true
+evm_version = 'cancun'
+optimizer = true
+optimizer-runs = 9999999
+src = 'contracts'
+out = 'out'
+cache_path = 'cache_forge'
+libs = ["lib"]

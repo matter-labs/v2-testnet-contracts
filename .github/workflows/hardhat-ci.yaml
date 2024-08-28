@@ -1,0 +1,38 @@
+name: Hardhat CI
+on: [workflow_call]
+jobs:
+  build-l1:
+    name: Build L1
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18.18.0
+          cache: yarn
+      - run: yarn
+      - run: HARDHAT_CONTRACTS_PATH=contracts/l1-contracts yarn hardhat compile
+
+  build-l2:
+    name: Build L2
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18.18.0
+          cache: yarn
+      - run: yarn
+      - run: HARDHAT_CONTRACTS_PATH=contracts/l2-contracts HARDHAT_VIA_IR=true yarn hardhat compile
+
+  build-sc:
+    name: Build SC
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18.18.0
+          cache: yarn
+      - run: yarn
+      - run: HARDHAT_CONTRACTS_PATH=contracts/system-contracts HARDHAT_VIA_IR=true yarn hardhat compile
