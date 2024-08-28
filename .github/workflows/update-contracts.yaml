@@ -22,7 +22,9 @@ jobs:
           node-version: 18.18.0
           cache: yarn
 
-      - name: fetch contracts from the given ref
+      - name: fetch contracts from the given ref and create a commit
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: .scripts/fetch_contracts --ref ${{ inputs.ref }}
 
       - name: create a new branch
