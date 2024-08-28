@@ -1,7 +1,5 @@
 name: Publish Package
-on:
-  release:
-    types: [published]
+on: [pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -13,6 +11,6 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           scope: '@matterlabs'
       - run: yarn
-      - run: yarn publish --tag ${{ github.event.release.tag_name }} --access public
+      - run: echo "yarn publish --tag github.event.release.tag_name --access public"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPMJS_NPM_MATTERLABS_AUTOMATION_TOKEN }}
