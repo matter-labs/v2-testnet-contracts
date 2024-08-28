@@ -49,7 +49,7 @@ if [ "$BRANCH_TAG_COMMIT" = "$COMMIT_HASH" ]; then
     COMMIT_HASH_MESSAGE="$COMMIT_HASH"
 else
     # Otherwise, use BRANCH_TAG_COMMIT-COMMIT_HASH
-    COMMIT_HASH_MESSAGE_MESSAGE="$BRANCH_TAG_COMMIT - $COMMIT_HASH"
+    COMMIT_HASH_MESSAGE="$BRANCH_TAG_COMMIT - $COMMIT_HASH"
 fi
 
 # Set up sparse checkout and fetch only the contracts directories
@@ -114,8 +114,8 @@ if [ $DIFF_FOUND -eq 1 ]; then
     # Clean up and commit the changes
     cd "$(dirname "$DEST_DIR")"
     git add contracts
-    git commit -m "Updated contracts ($COMMIT_HASH_MESSAGE_MESSAGE)" >/dev/null
-    echo "Contracts fetched, committed, and added to the destination repository from $REPO_URL ($COMMIT_HASH_MESSAGE_MESSAGE)"
+    git commit -m "Updated contracts ($COMMIT_HASH_MESSAGE)" >/dev/null
+    echo "Contracts fetched, committed, and added to the destination repository from $REPO_URL ($COMMIT_HASH_MESSAGE)"
 else
     echo "No changes detected, contracts are up to date. The script will exit without copying or committing."
 fi
