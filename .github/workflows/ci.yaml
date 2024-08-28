@@ -1,0 +1,9 @@
+name: CI
+on: [pull_request]
+jobs:
+  hardhat-ci:
+    name: Hardhat
+    uses: ./.github/workflows/hardhat-ci.yaml
+  foundry-ci:
+    name: Foundry
+    uses: ./.github/workflows/foundry-ci.yaml
