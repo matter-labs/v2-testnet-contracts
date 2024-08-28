@@ -22,9 +22,12 @@ jobs:
           node-version: 18.18.0
           cache: yarn
 
+      - name: configure git
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+
       - name: fetch contracts from the given ref and create a commit
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: .scripts/fetch_contracts --ref ${{ inputs.ref }}
 
       - name: create a new branch
