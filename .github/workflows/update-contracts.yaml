@@ -32,6 +32,8 @@ jobs:
         run: git push origin HEAD
 
       - name: create a pull request
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr create \
             --title "$(git log -1 --pretty=%B)" \
