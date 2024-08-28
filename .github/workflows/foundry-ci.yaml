@@ -19,4 +19,4 @@ jobs:
         with:
           submodules: recursive
       - uses: foundry-rs/foundry-toolchain@v1
-      - run: forge build --contracts contracts/l2-contracts
+      - run: forge build --via-ir --contracts contracts/l2-contracts

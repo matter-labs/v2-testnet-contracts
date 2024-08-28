@@ -23,7 +23,7 @@ jobs:
           node-version: 18.18.0
           cache: yarn
       - run: yarn
-      - run: HARDHAT_CONTRACTS_PATH=contracts/l2-contracts yarn hardhat compile
+      - run: HARDHAT_CONTRACTS_PATH=contracts/l2-contracts HARDHAT_VIA_IR=true yarn hardhat compile
 
   build-sc:
     name: Build SC
