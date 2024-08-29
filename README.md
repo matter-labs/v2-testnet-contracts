@@ -1,6 +1,6 @@
 # ZKsync Contracts
 
-[![Logo](logo.svg)](https://zksync.io)
+[![Logo](https://raw.githubusercontent.com/matter-labs/v2-testnet-contracts/main/logo.svg)](https://zksync.io)
 
 This package contains ZKsync L1, L2 and System Contracts. For more details see the [source repository](https://github.com/matter-labs/era-contracts).
 
