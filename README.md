@@ -9,13 +9,13 @@ This package contains ZKsync L1, L2 and System Contracts. For more details see t
 ### Hardhat
 
 ```bash
-yarn add @matterlabs/zksync-contracts
+yarn add @matterlabs/zksync-contracts@1.0.0-beta.1
 ```
 
 ### Foundry
 
 ```bash
-forge install matter-labs/v2-testnet-contracts
+forge install matter-labs/v2-testnet-contracts@1.0.0-beta.1
 ```
 
 Add the following to the `remappings.txt` file of your project:
