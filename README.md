@@ -1,6 +1,6 @@
 # ZKsync Contracts
 
-[![Logo](https://raw.githubusercontent.com/matter-labs/v2-testnet-contracts/main/logo.svg)](https://zksync.io)
+[![Logo](https://raw.githubusercontent.com/matter-labs/v2-testnet-contracts/beta/logo.svg)](https://zksync.io)
 
 This package contains ZKsync L1, L2 and System Contracts. For more details see the [source repository](https://github.com/matter-labs/era-contracts).
 
@@ -9,13 +9,13 @@ This package contains ZKsync L1, L2 and System Contracts. For more details see t
 ### Hardhat
 
 ```bash
-yarn add @matterlabs/zksync-contracts@1.0.0-beta.1
+yarn add @matterlabs/zksync-contracts@beta
 ```
 
 ### Foundry
 
 ```bash
-forge install matter-labs/v2-testnet-contracts@1.0.0-beta.1
+forge install matter-labs/v2-testnet-contracts@beta
 ```
 
 Add the following to the `remappings.txt` file of your project:
