@@ -43,5 +43,5 @@ jobs:
           gh pr create \
             --title "$(git log -1 --pretty=%B)" \
             --body "Updates contracts from https://github.com/matter-labs/era-contracts/tree/$(git log -1 --pretty=%B | grep -oE '\b([a-f0-9]{40})\b')" \
-            --base main \
+            --base ${{ github.ref_name }} \
             --head $(git rev-parse --abbrev-ref HEAD)
