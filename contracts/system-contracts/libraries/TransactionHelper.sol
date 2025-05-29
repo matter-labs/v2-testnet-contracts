@@ -79,10 +79,9 @@ library TransactionHelper {
     bytes32 internal constant EIP712_DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId)");
 
-    bytes32 internal constant EIP712_TRANSACTION_TYPE_HASH =
-        keccak256(
-            "Transaction(uint256 txType,uint256 from,uint256 to,uint256 gasLimit,uint256 gasPerPubdataByteLimit,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,uint256 paymaster,uint256 nonce,uint256 value,bytes data,bytes32[] factoryDeps,bytes paymasterInput)"
-        );
+    bytes32 internal constant EIP712_TRANSACTION_TYPE_HASH = keccak256(
+        "Transaction(uint256 txType,uint256 from,uint256 to,uint256 gasLimit,uint256 gasPerPubdataByteLimit,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,uint256 paymaster,uint256 nonce,uint256 value,bytes data,bytes32[] factoryDeps,bytes paymasterInput)"
+    );
 
     /// @notice Whether the token is Ethereum.
     /// @param _addr The address of the token
@@ -134,9 +133,8 @@ library TransactionHelper {
             )
         );
 
-        bytes32 domainSeparator = keccak256(
-            abi.encode(EIP712_DOMAIN_TYPEHASH, keccak256("zkSync"), keccak256("2"), block.chainid)
-        );
+        bytes32 domainSeparator =
+            keccak256(abi.encode(EIP712_DOMAIN_TYPEHASH, keccak256("zkSync"), keccak256("2"), block.chainid));
 
         return keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
     }
@@ -161,9 +159,8 @@ library TransactionHelper {
         }
 
         // "to" field is empty if it is EVM deploy tx
-        bytes memory encodedTo = _transaction.reserved[1] == 1
-            ? bytes(hex"80")
-            : RLPEncoder.encodeAddress(address(uint160(_transaction.to)));
+        bytes memory encodedTo =
+            _transaction.reserved[1] == 1 ? bytes(hex"80") : RLPEncoder.encodeAddress(address(uint160(_transaction.to)));
         bytes memory encodedValue = RLPEncoder.encodeUint256(_transaction.value);
         // Encode only the length of the transaction data, and not the data itself,
         // so as not to copy to memory a potentially huge transaction data twice.
@@ -184,37 +181,31 @@ library TransactionHelper {
         // Encode `chainId` according to EIP-155, but only if the `chainId` is specified in the transaction.
         bytes memory encodedChainId;
         if (_transaction.reserved[0] != 0) {
-            encodedChainId = bytes.concat(RLPEncoder.encodeUint256(block.chainid), hex"80_80");
+            encodedChainId = bytes.concat(RLPEncoder.encodeUint256(block.chainid), hex"8080");
         }
 
         bytes memory encodedListLength;
         unchecked {
-            uint256 listLength = encodedNonce.length +
-                encodedGasParam.length +
-                encodedTo.length +
-                encodedValue.length +
-                encodedDataLength.length +
-                _transaction.data.length +
-                encodedChainId.length;
+            uint256 listLength = encodedNonce.length + encodedGasParam.length + encodedTo.length + encodedValue.length
+                + encodedDataLength.length + _transaction.data.length + encodedChainId.length;
 
             // Safe cast, because the length of the list can't be so large.
             encodedListLength = RLPEncoder.encodeListLen(uint64(listLength));
         }
 
-        return
-            keccak256(
-                // solhint-disable-next-line func-named-parameters
-                bytes.concat(
-                    encodedListLength,
-                    encodedNonce,
-                    encodedGasParam,
-                    encodedTo,
-                    encodedValue,
-                    encodedDataLength,
-                    _transaction.data,
-                    encodedChainId
-                )
-            );
+        return keccak256(
+            // solhint-disable-next-line func-named-parameters
+            bytes.concat(
+                encodedListLength,
+                encodedNonce,
+                encodedGasParam,
+                encodedTo,
+                encodedValue,
+                encodedDataLength,
+                _transaction.data,
+                encodedChainId
+            )
+        );
     }
 
     /// @notice Encode hash of the EIP2930 transaction type.
@@ -238,14 +229,8 @@ library TransactionHelper {
                 : RLPEncoder.encodeAddress(address(uint160(_transaction.to)));
             bytes memory encodedValue = RLPEncoder.encodeUint256(_transaction.value);
             // solhint-disable-next-line func-named-parameters
-            encodedFixedLengthParams = bytes.concat(
-                encodedChainId,
-                encodedNonce,
-                encodedGasPrice,
-                encodedGasLimit,
-                encodedTo,
-                encodedValue
-            );
+            encodedFixedLengthParams =
+                bytes.concat(encodedChainId, encodedNonce, encodedGasPrice, encodedGasLimit, encodedTo, encodedValue);
         }
 
         // Encode only the length of the transaction data, and not the data itself,
@@ -269,27 +254,24 @@ library TransactionHelper {
 
         bytes memory encodedListLength;
         unchecked {
-            uint256 listLength = encodedFixedLengthParams.length +
-                encodedDataLength.length +
-                _transaction.data.length +
-                encodedAccessListLength.length;
+            uint256 listLength = encodedFixedLengthParams.length + encodedDataLength.length + _transaction.data.length
+                + encodedAccessListLength.length;
 
             // Safe cast, because the length of the list can't be so large.
             encodedListLength = RLPEncoder.encodeListLen(uint64(listLength));
         }
 
-        return
-            keccak256(
-                // solhint-disable-next-line func-named-parameters
-                bytes.concat(
-                    "\x01",
-                    encodedListLength,
-                    encodedFixedLengthParams,
-                    encodedDataLength,
-                    _transaction.data,
-                    encodedAccessListLength
-                )
-            );
+        return keccak256(
+            // solhint-disable-next-line func-named-parameters
+            bytes.concat(
+                "\x01",
+                encodedListLength,
+                encodedFixedLengthParams,
+                encodedDataLength,
+                _transaction.data,
+                encodedAccessListLength
+            )
+        );
     }
 
     /// @notice Encode hash of the EIP1559 transaction type.
@@ -346,26 +328,23 @@ library TransactionHelper {
 
         bytes memory encodedListLength;
         unchecked {
-            uint256 listLength = encodedFixedLengthParams.length +
-                encodedDataLength.length +
-                _transaction.data.length +
-                encodedAccessListLength.length;
+            uint256 listLength = encodedFixedLengthParams.length + encodedDataLength.length + _transaction.data.length
+                + encodedAccessListLength.length;
 
             // Safe cast, because the length of the list can't be so large.
             encodedListLength = RLPEncoder.encodeListLen(uint64(listLength));
         }
 
-        return
-            keccak256(
-                // solhint-disable-next-line func-named-parameters
-                bytes.concat(
-                    "\x02",
-                    encodedListLength,
-                    encodedFixedLengthParams,
-                    encodedDataLength,
-                    _transaction.data,
-                    encodedAccessListLength
-                )
-            );
+        return keccak256(
+            // solhint-disable-next-line func-named-parameters
+            bytes.concat(
+                "\x02",
+                encodedListLength,
+                encodedFixedLengthParams,
+                encodedDataLength,
+                _transaction.data,
+                encodedAccessListLength
+            )
+        );
     }
 }
