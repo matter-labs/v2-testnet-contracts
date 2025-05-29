@@ -2,6 +2,9 @@
 // We use a floating point pragma here so it can be used within other projects that interact with the ZKsync ecosystem without using our exact pragma version.
 pragma solidity ^0.8.0;
 
+import {IERC20} from "../openzeppelin/token/ERC20/IERC20.sol";
+import {SafeERC20} from "../openzeppelin/token/ERC20/utils/SafeERC20.sol";
+
 import {IPaymasterFlow} from "../interfaces/IPaymasterFlow.sol";
 import {BASE_TOKEN_SYSTEM_CONTRACT, BOOTLOADER_FORMAL_ADDRESS} from "../Constants.sol";
 import {RLPEncoder} from "./RLPEncoder.sol";
@@ -75,6 +78,8 @@ struct Transaction {
  * @notice Library is used to help custom accounts to work with common methods for the Transaction type.
  */
 library TransactionHelper {
+    using SafeERC20 for IERC20;
+
     /// @notice The EIP-712 typehash for the contract's domain
     bytes32 internal constant EIP712_DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId)");
@@ -346,5 +351,62 @@ library TransactionHelper {
                 encodedAccessListLength
             )
         );
+    }
+
+    /// @notice Processes the common paymaster flows, e.g. setting proper allowance
+    /// for tokens, etc. For more information on the expected behavior, check out
+    /// the "Paymaster flows" section in the documentation.
+    function processPaymasterInput(Transaction calldata _transaction) internal {
+        if (_transaction.paymasterInput.length < 4) {
+            revert InvalidInput();
+        }
+
+        bytes4 paymasterInputSelector = bytes4(_transaction.paymasterInput[0:4]);
+        if (paymasterInputSelector == IPaymasterFlow.approvalBased.selector) {
+            if (_transaction.paymasterInput.length < 68) {
+                revert InvalidInput();
+            }
+
+            // While the actual data consists of address, uint256 and bytes data,
+            // the data is needed only for the paymaster, so we ignore it here for the sake of optimization
+            (address token, uint256 minAllowance) = abi.decode(_transaction.paymasterInput[4:68], (address, uint256));
+            address paymaster = address(uint160(_transaction.paymaster));
+
+            uint256 currentAllowance = IERC20(token).allowance(address(this), paymaster);
+            if (currentAllowance < minAllowance) {
+                // Some tokens, e.g. USDT require that the allowance is firsty set to zero
+                // and only then updated to the new value.
+
+                IERC20(token).safeApprove(paymaster, 0);
+                IERC20(token).safeApprove(paymaster, minAllowance);
+            }
+        } else if (paymasterInputSelector == IPaymasterFlow.general.selector) {
+            // Do nothing. general(bytes) paymaster flow means that the paymaster must interpret these bytes on his own.
+        } else {
+            revert UnsupportedPaymasterFlow();
+        }
+    }
+
+    /// @notice Pays the required fee for the transaction to the bootloader.
+    /// @dev Currently it pays the maximum amount "_transaction.maxFeePerGas * _transaction.gasLimit",
+    /// it will change in the future.
+    function payToTheBootloader(Transaction calldata _transaction) internal returns (bool success) {
+        address bootloaderAddr = BOOTLOADER_FORMAL_ADDRESS;
+        uint256 amount = _transaction.maxFeePerGas * _transaction.gasLimit;
+
+        assembly {
+            success := call(gas(), bootloaderAddr, amount, 0, 0, 0, 0)
+        }
+    }
+
+    // Returns the balance required to process the transaction.
+    function totalRequiredBalance(Transaction calldata _transaction) internal pure returns (uint256 requiredBalance) {
+        if (address(uint160(_transaction.paymaster)) != address(0)) {
+            // Paymaster pays for the fee
+            requiredBalance = _transaction.value;
+        } else {
+            // The user should have enough balance for both the fee and the value of the transaction
+            requiredBalance = _transaction.maxFeePerGas * _transaction.gasLimit + _transaction.value;
+        }
     }
 }
